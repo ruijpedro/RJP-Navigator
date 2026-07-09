@@ -115,7 +115,7 @@ function App(){
 
     {tab==='desloc' && <main className="card"><h2>Deslocações</h2>{desloc.length===0 && <p>Sem deslocações registadas.</p>}<table><thead><tr><th>Data</th><th>Hora</th><th>Destino</th><th>PK</th><th>GPS</th></tr></thead><tbody>{desloc.map(d=><tr key={d.id}><td>{d.data}</td><td>{d.hora}</td><td>{d.destino}</td><td>{d.pk}</td><td>{d.gps}</td></tr>)}</tbody></table></main>}
 
-    <footer>RJP Navigator V1.1 · uso interno/académico · dados editáveis em src/data</footer>
+    <footer>RJP Navigator V1.2 · uso interno/académico · dados editáveis em src/data</footer>
   </div>
 }
 
