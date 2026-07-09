@@ -56,18 +56,28 @@ jobs:
           MANIFEST=android/app/src/main/AndroidManifest.xml
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('android/app/src/main/AndroidManifest.xml')
-          s=p.read_text()
-          perms=[
-            '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />',
-            '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />'
+          import re
+
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text(encoding='utf-8')
+
+          # Inserir permissões DEPOIS da abertura <manifest ...>, nunca antes.
+          manifest_open = re.search(r'<manifest\b[^>]*>', s)
+          if not manifest_open:
+              raise SystemExit('AndroidManifest.xml sem tag <manifest> válida')
+
+          insert_after = manifest_open.end()
+          items = [
+              '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />',
+              '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />',
+              '<uses-feature android:name="android.hardware.location.gps" android:required="false" />'
           ]
-          for perm in perms:
-            if perm not in s:
-              s=s.replace('<manifest ', perm+'\n<manifest ', 1) if s.lstrip().startswith('<manifest ') else s.replace('>', '>\n'+perm, 1)
-          if '<uses-feature android:name="android.hardware.location.gps"' not in s:
-            s=s.replace('<application', '<uses-feature android:name="android.hardware.location.gps" android:required="false" />\n    <application', 1)
-          p.write_text(s)
+
+          to_add = [x for x in items if x not in s]
+          if to_add:
+              s = s[:insert_after] + '\n    ' + '\n    '.join(to_add) + s[insert_after:]
+
+          p.write_text(s, encoding='utf-8')
           PY
           grep -n "ACCESS_.*LOCATION\|hardware.location" $MANIFEST
 
