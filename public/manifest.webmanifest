@@ -1,0 +1,13 @@
+{
+  "name": "RJP Navigator",
+  "short_name": "RJP Nav",
+  "description": "Navegador técnico para ativos ferroviários da Linha do Oeste",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f8f5",
+  "theme_color": "#006b3f",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
