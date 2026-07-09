@@ -12,14 +12,17 @@ jobs:
   build-android:
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Clean previous install
+      - name: Clean npm
         run: |
           rm -rf node_modules package-lock.json
           npm cache clean --force
@@ -29,7 +32,7 @@ jobs:
 
       - name: Verify Vite
         run: |
-          node -e "console.log(require('./node_modules/vite/package.json').version)"
+          node -e "console.log('vite', require('./node_modules/vite/package.json').version)"
           ./node_modules/.bin/vite --version
 
       - name: Build WebApp
@@ -48,13 +51,43 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Add Android GPS permissions
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android/app/src/main/AndroidManifest.xml')
+          s=p.read_text()
+          perms=[
+            '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />',
+            '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />'
+          ]
+          for perm in perms:
+            if perm not in s:
+              s=s.replace('<manifest ', perm+'\n<manifest ', 1) if s.lstrip().startswith('<manifest ') else s.replace('>', '>\n'+perm, 1)
+          if '<uses-feature android:name="android.hardware.location.gps"' not in s:
+            s=s.replace('<application', '<uses-feature android:name="android.hardware.location.gps" android:required="false" />\n    <application', 1)
+          p.write_text(s)
+          PY
+          grep -n "ACCESS_.*LOCATION\|hardware.location" $MANIFEST
+
+      - name: Apply RJP Navigator icon
+        run: |
+          mkdir -p android/app/src/main/res
+          cp -R android-res/* android/app/src/main/res/
+          sed -i 's#android:icon="@[^"]*"#android:icon="@mipmap/ic_launcher"#' android/app/src/main/AndroidManifest.xml || true
+          sed -i 's#android:roundIcon="@[^"]*"#android:roundIcon="@mipmap/ic_launcher"#' android/app/src/main/AndroidManifest.xml || true
+          grep -q 'android:roundIcon=' android/app/src/main/AndroidManifest.xml || sed -i 's#android:icon="@mipmap/ic_launcher"#android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"#' android/app/src/main/AndroidManifest.xml
+          find android/app/src/main/res -name 'ic_launcher*' -print
+
       - name: Build APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
           name: RJP_Navigator_APK
           path: android/app/build/outputs/apk/debug/*.apk
