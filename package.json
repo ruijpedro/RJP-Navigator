@@ -1,23 +1,23 @@
 {
-  "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "npx vite build",
-    "preview": "npx vite preview --host 0.0.0.0"
-  },
-  "dependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.7",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "jspdf": "^2.5.2",
-    "xlsx": "^0.18.5",
-    "@capacitor/core": "^7.2.0",
-    "@capacitor/cli": "^7.2.0",
-    "@capacitor/android": "^7.2.0"
-  },
-  "devDependencies": {},
+  "name": "rjp-navigator",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
-  "name": "rjp-navigator",
-  "version": "1.3.0"
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "./node_modules/.bin/vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "7.2.0",
+    "@capacitor/cli": "7.2.0",
+    "@capacitor/core": "7.2.0",
+    "@vitejs/plugin-react": "4.3.4",
+    "vite": "5.4.11",
+    "jspdf": "2.5.2",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "xlsx": "0.18.5"
+  },
+  "devDependencies": {}
 }

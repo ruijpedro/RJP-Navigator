@@ -1,3 +1,7 @@
+# RJP Navigator V1.5 — Fix Vite Definitivo
+
+Esta versão instala o Vite como dependência normal e o workflow chama diretamente `./node_modules/.bin/vite build`, evitando o erro `vite: not found` e o `npx vite@8`.
+
 # RJP Navigator V1.2 — Linha do Oeste
 
 Aplicação React/Vite/Capacitor para navegação técnica ferroviária.
@@ -24,3 +28,9 @@ Aplicação React/Vite/Capacitor para navegação técnica ferroviária.
 ## Notas
 
 A app não substitui o Google Maps/Waze. Funciona como navegador técnico interno para localizar ativos e abrir a navegação externa quando necessário.
+
+
+## V1.4 Fix Build
+- Vite fixado em 5.4.11.
+- @vitejs/plugin-react fixado em 4.3.4.
+- Workflows passam a instalar explicitamente o Vite antes do build.
