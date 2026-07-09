@@ -34,3 +34,9 @@ A app não substitui o Google Maps/Waze. Funciona como navegador técnico intern
 - Vite fixado em 5.4.11.
 - @vitejs/plugin-react fixado em 4.3.4.
 - Workflows passam a instalar explicitamente o Vite antes do build.
+
+
+## V1.6
+- Ícone Android aplicado no workflow através de cópia direta para `android/app/src/main/res`.
+- Lista de PN simplificada: apenas Km, localidade, concelho e freguesia.
+- Separação mantida para Estações/Apeadeiros e Edifícios ferroviários.

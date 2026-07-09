@@ -31,7 +31,8 @@ function App(){
 
   const ativos = useMemo(()=>[
     ...estacoesLinhaOeste.map(x=>({ ...x, key:'est-'+x.id, titulo:x.nome })),
-    ...passagensNivelLinhaOeste.map(x=>({ ...x, key:'pn-'+x.id, titulo:`${x.indice} · PK ${x.pk}` })),
+    ...estacoesLinhaOeste.filter(x=>String(x.tipo).includes('Estação')).map(x=>({ ...x, key:'edf-'+x.id, categoria:'Edifício', titulo:`EDF · ${x.nome}`, observacoes:'Edifício ferroviário associado à estação' })),
+    ...passagensNivelLinhaOeste.map(x=>({ ...x, key:'pn-'+x.id, titulo:`PN · Km ${x.km || x.pk}` })),
     ...marcosKmLinhaOeste.map(x=>({ ...x, key:'km-'+x.id, titulo:x.nome })),
     ...extras.map((x,i)=>({ ...x, key:'extra-'+i, titulo:x.nome || x.indice || 'Local registado' }))
   ],[extras])
@@ -39,7 +40,7 @@ function App(){
   const filtrados = useMemo(()=>ativos.filter(a=>{
     const text = JSON.stringify(a).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     const query = q.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    const okTipo = tipo === 'todos' || a.categoria === tipo || (tipo === 'desativadas' && a.estado === 'Desativada')
+    const okTipo = tipo === 'todos' || a.categoria === tipo
     return okTipo && text.includes(query)
   }).sort((a,b)=>String(a.pk || a.km || '').localeCompare(String(b.pk || b.km || ''), 'pt')),[ativos,q,tipo])
 
@@ -80,20 +81,21 @@ function App(){
     </nav>
 
     {tab==='dashboard' && <main className="grid">
-      <section className="card hero"><h2>RJP Rail Navigator</h2><p>Base local para consulta e navegação dos ativos ferroviários da Linha do Oeste.</p><div className="stats"><b>{estacoesLinhaOeste.length}</b><span>Estações/Apeadeiros</span><b>{passagensNivelLinhaOeste.length}</b><span>Passagens de Nível</span><b>{marcosKmLinhaOeste.length}</b><span>Marcos PK/Km</span><b>{extras.length}</b><span>Locais adicionados</span></div></section>
+      <section className="card hero"><h2>RJP Rail Navigator</h2><p>Base local para consulta e navegação dos ativos ferroviários da Linha do Oeste.</p><div className="stats"><b>{estacoesLinhaOeste.length}</b><span>Estações/Apeadeiros</span><b>{estacoesLinhaOeste.filter(x=>String(x.tipo).includes('Estação')).length}</b><span>Edifícios</span><b>{passagensNivelLinhaOeste.length}</b><span>PN por Km</span><b>{marcosKmLinhaOeste.length}</b><span>Marcos PK/Km</span><b>{extras.length}</b><span>Locais adicionados</span></div></section>
       <section className="card"><h3>GPS</h3><p>{gps ? `Lat ${gps.lat} · Lng ${gps.lng} · precisão ${gps.acc} m` : 'Ainda sem posição GPS.'}</p><button onClick={obterGPS}>Atualizar GPS</button></section>
       <section className="card"><h3>Ações rápidas</h3><button onClick={()=>setTab('pn')}>Ver Passagens de Nível</button><button onClick={()=>setTab('km')}>Ver PK/Km</button><button onClick={()=>setTab('novo')}>Adicionar PN com GPS</button><button onClick={exportarJSON}>Exportar JSON</button></section>
     </main>}
 
     {(tab==='locais' || tab==='pn' || tab==='km' || tab==='mapa') && <main className="layout">
       <aside className="card list">
-        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Pesquisar por PK, OE, localidade..." />
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Pesquisar por Km, localidade, estação ou edifício..." />
         <select value={tipo} onChange={e=>setTipo(e.target.value)}>
           <option value="todos">Todos</option>
           <option value="Estação/Apeadeiro">Estações/Apeadeiros</option>
-          <option value="Passagem de Nível">Passagens de Nível</option>
+          <option value="Edifício">Edifícios</option>
+          <option value="Passagem de Nível">PN por Km</option>
           <option value="Marco Quilométrico">Marcos PK/Km</option>
-          <option value="desativadas">PN desativadas</option>
+          
         </select>
         {filtrados.map(item=><button key={item.key} className={'row '+(current?.key===item.key?'sel':'')} onClick={()=>setSel(item)}><b>{item.titulo}</b><small>{item.categoria} · {item.localidade || item.nome || ''} · {item.concelho || ''}</small></button>)}
       </aside>
@@ -102,7 +104,7 @@ function App(){
           <h2>{current.titulo}</h2>
           <p className="pill">{current.categoria}</p>
           <dl>
-            <dt>PK/Km</dt><dd>{current.pk || current.km || '-'}</dd><dt>Tipo</dt><dd>{current.tipo || '-'}</dd><dt>Lado</dt><dd>{current.lado || '-'}</dd><dt>Localidade</dt><dd>{current.localidade || current.nome || '-'}</dd><dt>Concelho</dt><dd>{current.concelho || '-'}</dd><dt>Freguesia</dt><dd>{current.freguesia || '-'}</dd><dt>Estado</dt><dd>{current.estado || '-'}</dd><dt>Observações</dt><dd>{current.observacoes || '-'}</dd>
+            <dt>PK/Km</dt><dd>{current.pk || current.km || '-'}</dd><dt>Localidade/Edifício/Estação</dt><dd>{current.localidade || current.nome || '-'}</dd><dt>Concelho</dt><dd>{current.concelho || '-'}</dd><dt>Freguesia</dt><dd>{current.freguesia || '-'}</dd><dt>Observações</dt><dd>{current.observacoes || '-'}</dd>
           </dl>
           {tab==='km' && <div className="pkbox"><h3>Referências rápidas</h3>{marcosPrincipaisLinhaOeste.map(m=><button key={m.pk} className="tag" onClick={()=>setQ(m.pk)}>{m.pk} · {m.nome}</button>)}</div>}
           {tab==='mapa' && <iframe title="mapa" className="map" src={`https://www.openstreetmap.org/export/embed.html?bbox=-9.45%2C38.55%2C-8.65%2C39.95&layer=mapnik&marker=${current.lat || 39.743}%2C${current.lng || -8.807}`}></iframe>}
@@ -115,7 +117,7 @@ function App(){
 
     {tab==='desloc' && <main className="card"><h2>Deslocações</h2>{desloc.length===0 && <p>Sem deslocações registadas.</p>}<table><thead><tr><th>Data</th><th>Hora</th><th>Destino</th><th>PK</th><th>GPS</th></tr></thead><tbody>{desloc.map(d=><tr key={d.id}><td>{d.data}</td><td>{d.hora}</td><td>{d.destino}</td><td>{d.pk}</td><td>{d.gps}</td></tr>)}</tbody></table></main>}
 
-    <footer>RJP Navigator V1.2 · uso interno/académico · dados editáveis em src/data</footer>
+    <footer>RJP Navigator V1.6 · uso interno/académico · dados editáveis em src/data</footer>
   </div>
 }
 
