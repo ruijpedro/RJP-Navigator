@@ -40,3 +40,16 @@ A app não substitui o Google Maps/Waze. Funciona como navegador técnico intern
 - Ícone Android aplicado no workflow através de cópia direta para `android/app/src/main/res`.
 - Lista de PN simplificada: apenas Km, localidade, concelho e freguesia.
 - Separação mantida para Estações/Apeadeiros e Edifícios ferroviários.
+
+
+## V2.0
+- Guarda coordenadas GPS diretamente em cada ativo.
+- Exporta JSON com locais, GPS guardado e deslocações.
+- PN simplificadas por Km/localidade/concelho/freguesia.
+- Edifícios, estações e apeadeiros mantidos.
+- Ícone Android/WebApp aplicado.
+
+
+## Correção V2.1 — permissões de localização Android
+
+A APK passa a incluir `ACCESS_FINE_LOCATION` e `ACCESS_COARSE_LOCATION` no AndroidManifest e usa `@capacitor/geolocation` para pedir a permissão de localização diretamente no telemóvel quando se carrega em **Atualizar GPS** ou **Usar GPS atual**.

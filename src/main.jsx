@@ -7,6 +7,7 @@ import { marcosKmLinhaOeste, marcosPrincipaisLinhaOeste } from './data/marcosKm.
 
 const LS_LOCAIS = 'rjp_nav_locais_extra_v1'
 const LS_DESLOC = 'rjp_nav_deslocacoes_v1'
+const LS_GPS_ATIVOS = 'rjp_nav_gps_ativos_v2'
 const mapsUrl = (item) => {
   const q = item.lat && item.lng ? `${item.lat},${item.lng}` : `${item.nome || item.indice || ''} ${item.localidade || ''} ${item.concelho || ''} Portugal`
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
@@ -27,15 +28,21 @@ function App(){
   const [gps,setGps] = useState(null)
   const [extras,setExtras] = useState(load(LS_LOCAIS, []))
   const [desloc,setDesloc] = useState(load(LS_DESLOC, []))
+  const [gpsAtivos,setGpsAtivos] = useState(load(LS_GPS_ATIVOS, {}))
   const [form,setForm] = useState({categoria:'Passagem de Nível',nome:'',indice:'',pk:'',localidade:'',concelho:'',freguesia:'',observacoes:''})
 
+  const withGps = (item) => {
+    const saved = gpsAtivos[item.key]
+    return saved ? {...item, lat:saved.lat, lng:saved.lng, gpsSaved:saved} : item
+  }
+
   const ativos = useMemo(()=>[
-    ...estacoesLinhaOeste.map(x=>({ ...x, key:'est-'+x.id, titulo:x.nome })),
-    ...estacoesLinhaOeste.filter(x=>String(x.tipo).includes('Estação')).map(x=>({ ...x, key:'edf-'+x.id, categoria:'Edifício', titulo:`EDF · ${x.nome}`, observacoes:'Edifício ferroviário associado à estação' })),
-    ...passagensNivelLinhaOeste.map(x=>({ ...x, key:'pn-'+x.id, titulo:`PN · Km ${x.km || x.pk}` })),
-    ...marcosKmLinhaOeste.map(x=>({ ...x, key:'km-'+x.id, titulo:x.nome })),
-    ...extras.map((x,i)=>({ ...x, key:'extra-'+i, titulo:x.nome || x.indice || 'Local registado' }))
-  ],[extras])
+    ...estacoesLinhaOeste.map(x=>withGps({ ...x, key:'est-'+x.id, titulo:x.nome })),
+    ...estacoesLinhaOeste.filter(x=>String(x.tipo).includes('Estação')).map(x=>withGps({ ...x, key:'edf-'+x.id, categoria:'Edifício', titulo:`EDF · ${x.nome}`, observacoes:'Edifício ferroviário associado à estação' })),
+    ...passagensNivelLinhaOeste.map(x=>withGps({ ...x, key:'pn-'+x.id, titulo:`PN · Km ${x.km || x.pk}` })),
+    ...marcosKmLinhaOeste.map(x=>withGps({ ...x, key:'km-'+x.id, titulo:x.nome })),
+    ...extras.map((x,i)=>withGps({ ...x, key:x.key || 'extra-'+i, titulo:x.nome || x.indice || 'Local registado' }))
+  ],[extras,gpsAtivos])
 
   const filtrados = useMemo(()=>ativos.filter(a=>{
     const text = JSON.stringify(a).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -44,28 +51,71 @@ function App(){
     return okTipo && text.includes(query)
   }).sort((a,b)=>String(a.pk || a.km || '').localeCompare(String(b.pk || b.km || ''), 'pt')),[ativos,q,tipo])
 
-  function obterGPS(){
-    if(!navigator.geolocation){ alert('GPS não disponível neste dispositivo.'); return }
-    navigator.geolocation.getCurrentPosition(
-      p=>setGps({lat:p.coords.latitude.toFixed(6), lng:p.coords.longitude.toFixed(6), acc:Math.round(p.coords.accuracy)}),
-      ()=>alert('Não foi possível obter a localização. Confirma permissões de GPS.'),
-      {enableHighAccuracy:true, timeout:10000}
-    )
+  async function obterGPS(){
+    try {
+      // APK Android: usa o plugin Capacitor para forçar o pedido de permissões ao telemóvel.
+      const isAndroidApp = !!window.Capacitor?.isNativePlatform?.()
+      if (isAndroidApp) {
+        const { Geolocation } = await import('@capacitor/geolocation')
+        const perm = await Geolocation.requestPermissions({ permissions: ['location'] })
+        if (perm.location !== 'granted' && perm.coarseLocation !== 'granted') {
+          alert('Permissão de localização não concedida. Ativa a localização nas permissões da app.')
+          return
+        }
+        const p = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 12000, maximumAge: 0 })
+        setGps({
+          lat: p.coords.latitude.toFixed(6),
+          lng: p.coords.longitude.toFixed(6),
+          acc: Math.round(p.coords.accuracy || 0),
+          alt: p.coords.altitude ? Math.round(p.coords.altitude) : '',
+          time: new Date().toISOString()
+        })
+        return
+      }
+
+      // WebApp / browser.
+      if(!navigator.geolocation){ alert('GPS não disponível neste dispositivo.'); return }
+      navigator.geolocation.getCurrentPosition(
+        p=>setGps({lat:p.coords.latitude.toFixed(6), lng:p.coords.longitude.toFixed(6), acc:Math.round(p.coords.accuracy), alt:p.coords.altitude ? Math.round(p.coords.altitude) : '', time:new Date().toISOString()}),
+        ()=>alert('Não foi possível obter a localização. Confirma permissões de GPS.'),
+        {enableHighAccuracy:true, timeout:12000, maximumAge:0}
+      )
+    } catch (e) {
+      console.error(e)
+      alert('Não foi possível obter a localização. Confirma se o GPS está ligado e se a app tem permissão de localização.')
+    }
   }
   function registarDeslocacao(item){
     const row = {id:Date.now(), data:today(), hora:new Date().toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}), destino:item.titulo || item.nome || item.indice, categoria:item.categoria, pk:item.pk || item.km || '', gps:gps ? `${gps.lat}, ${gps.lng}` : '', obs:''}
     const novo = [row, ...desloc]
     setDesloc(novo); save(LS_DESLOC, novo); alert('Deslocação registada.')
   }
+  function guardarGPSAtivo(item){
+    if(!gps){ alert('Primeiro carrega em Atualizar GPS.'); return }
+    const key = item.key
+    const reg = {
+      lat:gps.lat, lng:gps.lng, acc:gps.acc, alt:gps.alt || '',
+      data:new Date().toLocaleDateString('pt-PT'),
+      hora:new Date().toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}),
+      ativo:item.titulo || item.nome || item.indice || 'Ativo',
+      categoria:item.categoria || '',
+      pk:item.pk || item.km || ''
+    }
+    const novo = {...gpsAtivos, [key]:reg}
+    setGpsAtivos(novo); save(LS_GPS_ATIVOS, novo)
+    setSel({...item, lat:gps.lat, lng:gps.lng, gpsSaved:reg})
+    alert('Localização GPS guardada no ativo.')
+  }
+
   function adicionarLocal(){
-    const novo = {...form, id:'local-'+Date.now(), linha:'Linha do Oeste', lat:gps?.lat || '', lng:gps?.lng || '', estado:'Ativa'}
+    const novo = {...form, id:'local-'+Date.now(), key:'extra-'+Date.now(), linha:'Linha do Oeste', lat:gps?.lat || '', lng:gps?.lng || '', estado:'Ativa'}
     const lista = [novo, ...extras]
     setExtras(lista); save(LS_LOCAIS, lista)
     setForm({categoria:'Passagem de Nível',nome:'',indice:'',pk:'',localidade:'',concelho:'',freguesia:'',observacoes:''})
     setTab('locais')
   }
   function exportarJSON(){
-    const blob = new Blob([JSON.stringify({locais:ativos, deslocacoes:desloc}, null, 2)], {type:'application/json'})
+    const blob = new Blob([JSON.stringify({locais:ativos, gpsAtivos, deslocacoes:desloc}, null, 2)], {type:'application/json'})
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='rjp-navigator-dados.json'; a.click()
   }
 
@@ -82,7 +132,7 @@ function App(){
 
     {tab==='dashboard' && <main className="grid">
       <section className="card hero"><h2>RJP Rail Navigator</h2><p>Base local para consulta e navegação dos ativos ferroviários da Linha do Oeste.</p><div className="stats"><b>{estacoesLinhaOeste.length}</b><span>Estações/Apeadeiros</span><b>{estacoesLinhaOeste.filter(x=>String(x.tipo).includes('Estação')).length}</b><span>Edifícios</span><b>{passagensNivelLinhaOeste.length}</b><span>PN por Km</span><b>{marcosKmLinhaOeste.length}</b><span>Marcos PK/Km</span><b>{extras.length}</b><span>Locais adicionados</span></div></section>
-      <section className="card"><h3>GPS</h3><p>{gps ? `Lat ${gps.lat} · Lng ${gps.lng} · precisão ${gps.acc} m` : 'Ainda sem posição GPS.'}</p><button onClick={obterGPS}>Atualizar GPS</button></section>
+      <section className="card"><h3>GPS</h3><p>{gps ? `Lat ${gps.lat} · Lng ${gps.lng} · precisão ${gps.acc} m` : 'Ainda sem posição GPS.'}</p><button onClick={obterGPS}>Atualizar GPS</button><p className="mini">Locais com GPS guardado: {Object.keys(gpsAtivos).length}</p></section>
       <section className="card"><h3>Ações rápidas</h3><button onClick={()=>setTab('pn')}>Ver Passagens de Nível</button><button onClick={()=>setTab('km')}>Ver PK/Km</button><button onClick={()=>setTab('novo')}>Adicionar PN com GPS</button><button onClick={exportarJSON}>Exportar JSON</button></section>
     </main>}
 
@@ -104,11 +154,11 @@ function App(){
           <h2>{current.titulo}</h2>
           <p className="pill">{current.categoria}</p>
           <dl>
-            <dt>PK/Km</dt><dd>{current.pk || current.km || '-'}</dd><dt>Localidade/Edifício/Estação</dt><dd>{current.localidade || current.nome || '-'}</dd><dt>Concelho</dt><dd>{current.concelho || '-'}</dd><dt>Freguesia</dt><dd>{current.freguesia || '-'}</dd><dt>Observações</dt><dd>{current.observacoes || '-'}</dd>
+            <dt>PK/Km</dt><dd>{current.pk || current.km || '-'}</dd><dt>Localidade/Edifício/Estação</dt><dd>{current.localidade || current.nome || '-'}</dd><dt>Concelho</dt><dd>{current.concelho || '-'}</dd><dt>Freguesia</dt><dd>{current.freguesia || '-'}</dd><dt>Observações</dt><dd>{current.observacoes || '-'}</dd><dt>GPS guardado</dt><dd>{current.gpsSaved ? `${current.gpsSaved.lat}, ${current.gpsSaved.lng} · ±${current.gpsSaved.acc} m · ${current.gpsSaved.data} ${current.gpsSaved.hora}` : (current.lat && current.lng ? `${current.lat}, ${current.lng}` : 'Sem coordenadas guardadas')}</dd>
           </dl>
           {tab==='km' && <div className="pkbox"><h3>Referências rápidas</h3>{marcosPrincipaisLinhaOeste.map(m=><button key={m.pk} className="tag" onClick={()=>setQ(m.pk)}>{m.pk} · {m.nome}</button>)}</div>}
           {tab==='mapa' && <iframe title="mapa" className="map" src={`https://www.openstreetmap.org/export/embed.html?bbox=-9.45%2C38.55%2C-8.65%2C39.95&layer=mapnik&marker=${current.lat || 39.743}%2C${current.lng || -8.807}`}></iframe>}
-          <div className="actions"><a href={mapsUrl(current)} target="_blank">Abrir Google Maps</a><a href={wazeUrl(current)} target="_blank">Abrir Waze</a><button onClick={()=>registarDeslocacao(current)}>Registar deslocação</button></div>
+          <div className="actions"><button onClick={obterGPS}>Atualizar GPS</button><button onClick={()=>guardarGPSAtivo(current)}>Guardar GPS neste ativo</button><a href={mapsUrl(current)} target="_blank">Abrir Google Maps</a><a href={wazeUrl(current)} target="_blank">Abrir Waze</a><button onClick={()=>registarDeslocacao(current)}>Registar deslocação</button></div>
         </>}
       </section>
     </main>}
@@ -117,7 +167,7 @@ function App(){
 
     {tab==='desloc' && <main className="card"><h2>Deslocações</h2>{desloc.length===0 && <p>Sem deslocações registadas.</p>}<table><thead><tr><th>Data</th><th>Hora</th><th>Destino</th><th>PK</th><th>GPS</th></tr></thead><tbody>{desloc.map(d=><tr key={d.id}><td>{d.data}</td><td>{d.hora}</td><td>{d.destino}</td><td>{d.pk}</td><td>{d.gps}</td></tr>)}</tbody></table></main>}
 
-    <footer>RJP Navigator V1.6 · uso interno/académico · dados editáveis em src/data</footer>
+    <footer>RJP Navigator V2.1 · GPS com permissões Android · uso interno/académico · dados editáveis em src/data</footer>
   </div>
 }
 
