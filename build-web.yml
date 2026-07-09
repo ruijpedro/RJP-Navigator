@@ -19,16 +19,21 @@ jobs:
         with:
           node-version: 20
 
-      - name: Reset npm
+      - name: Clean previous install
         run: |
-          npm cache clean --force
           rm -rf node_modules package-lock.json
+          npm cache clean --force
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund --legacy-peer-deps
+        run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps
+
+      - name: Verify Vite
+        run: |
+          node -e "console.log(require('./node_modules/vite/package.json').version)"
+          ./node_modules/.bin/vite --version
 
       - name: Build WebApp
-        run: npm run build
+        run: ./node_modules/.bin/vite build
 
       - uses: actions/upload-artifact@v4
         with:
