@@ -1,4 +1,4 @@
-name: Build RJP Navigator APK
+name: Build RJP Navigator Android APK
 
 on:
   push:
@@ -14,24 +14,46 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - uses: actions/setup-java@v4
+
+      - name: Clean previous install
+        run: |
+          rm -rf node_modules package-lock.json
+          npm cache clean --force
+
+      - name: Install dependencies
+        run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps
+
+      - name: Verify Vite
+        run: |
+          node -e "console.log(require('./node_modules/vite/package.json').version)"
+          ./node_modules/.bin/vite --version
+
+      - name: Build WebApp
+        run: ./node_modules/.bin/vite build
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund --legacy-peer-deps
-      - name: Build WebApp
-        run: npm run build
-      - name: Prepare Android
+
+      - name: Add Android platform if missing
         run: |
-          rm -rf android
-          npx cap add android
-          npx cap sync android
-      - name: Build APK Debug
-        run: cd android && chmod +x gradlew && ./gradlew assembleDebug
+          if [ ! -d android ]; then npx cap add android; fi
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
       - uses: actions/upload-artifact@v4
         with:
           name: RJP_Navigator_APK
