@@ -53,3 +53,8 @@ A app não substitui o Google Maps/Waze. Funciona como navegador técnico intern
 ## Correção V2.1 — permissões de localização Android
 
 A APK passa a incluir `ACCESS_FINE_LOCATION` e `ACCESS_COARSE_LOCATION` no AndroidManifest e usa `@capacitor/geolocation` para pedir a permissão de localização diretamente no telemóvel quando se carrega em **Atualizar GPS** ou **Usar GPS atual**.
+
+
+## V2.2
+- Corrigido AndroidManifest.xml: permissões de GPS inseridas corretamente dentro da tag `<manifest>`.
+- Mantém ícone Android e dados PN/EDF/Estações.
