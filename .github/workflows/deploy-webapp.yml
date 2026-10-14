@@ -1,0 +1,59 @@
+name: Publicar RJP Navigator WebApp
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: rjp-navigator-github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Configurar npm público
+        run: |
+          rm -rf node_modules package-lock.json
+          npm config set registry https://registry.npmjs.org/
+      - name: Instalar dependências
+        run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps --package-lock=false --fetch-retries=4
+      - name: Testar PK e validar mapas IP locais
+        run: |
+          npm test
+          RJP_REQUIRE_MAPS=1 npm run prepare:maps
+      - name: Compilar WebApp para GitHub Pages
+        env:
+          RJP_GITHUB_PAGES: '1'
+        run: |
+          npm run build
+          touch dist/.nojekyll
+          test -s dist/index.html
+          test -s dist/data/linha-oeste-preload.json
+          test -s dist/data/rede-ferroviaria-nacional.json
+          test -s dist/sw.js
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
+      - name: Enviar site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - name: Publicar site
+        id: deployment
+        uses: actions/deploy-pages@v4
