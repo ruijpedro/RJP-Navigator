@@ -1,4 +1,4 @@
-name: Build RJP Navigator APK V3.6
+name: Build RJP Navigator APK V3.7
 
 on:
   workflow_dispatch:
@@ -37,13 +37,13 @@ jobs:
           npm config set registry https://registry.npmjs.org/
           npm config get registry
 
-      - name: Instalar dependências da V3.6
+      - name: Instalar dependências da V3.7
         run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps --package-lock=false --fetch-retries=4
 
       - name: Executar testes
         run: npm test
 
-      - name: Incluir mapa da Linha do Oeste na aplicação (obrigatório)
+      - name: Validar cartografia IP incluída no repositório (offline)
         env:
           RJP_REQUIRE_MAPS: '1'
         run: npm run prepare:maps
@@ -126,13 +126,13 @@ jobs:
           npm cache clean --force
           npm config set registry https://registry.npmjs.org/
 
-      - name: Instalar dependências da V3.6
+      - name: Instalar dependências da V3.7
         run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps --package-lock=false --fetch-retries=4
 
       - name: Executar testes
         run: npm test
 
-      - name: Incluir mapa da Linha do Oeste na aplicação (obrigatório)
+      - name: Validar cartografia IP incluída no repositório (offline)
         env:
           RJP_REQUIRE_MAPS: '1'
         run: npm run prepare:maps
@@ -143,6 +143,6 @@ jobs:
       - name: Publicar WebApp
         uses: actions/upload-artifact@v4
         with:
-          name: RJP_Navigator_V3_6_WebApp
+          name: RJP_Navigator_V3_7_WebApp
           path: dist/
           if-no-files-found: error
