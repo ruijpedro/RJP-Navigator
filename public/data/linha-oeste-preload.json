@@ -1,0 +1,8 @@
+{
+  "version": "3.4.0",
+  "ready": false,
+  "source": "OpenStreetMap: relation 2076345",
+  "route": null,
+  "osmPoints": [],
+  "reason": "O traçado validado é obtido automaticamente na compilação ou no primeiro arranque com internet."
+}

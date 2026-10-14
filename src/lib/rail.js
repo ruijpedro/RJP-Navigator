@@ -9,7 +9,7 @@ export function parsePK(value){
   if(m)return Number(m[1])*1000+Number(m[2].padEnd(3,'0'));
   m=s.match(/^\d{4,6}$/);return m?Number(s):null;
 }
-export function formatPK(value){if(!Number.isFinite(value))return '—';return `${Math.floor(value/1000)}+${String(Math.round(value%1000)).padStart(3,'0')}`;}
+export function formatPK(value){if(!Number.isFinite(value))return '—';const n=Math.round(value);return `${Math.floor(n/1000)}+${String(n%1000).padStart(3,'0')}`;}
 export function validGPS(lat,lng){return Number.isFinite(Number(lat))&&Number.isFinite(Number(lng))&&Number(lat)>=-90&&Number(lat)<=90&&Number(lng)>=-180&&Number(lng)<=180&&String(lat).trim()!==''&&String(lng).trim()!=='';}
 export function metersBetween(a,b){const R=6371008.8;const rad=Math.PI/180;const dLat=(b[0]-a[0])*rad;const dLon=(b[1]-a[1])*rad;const x=Math.sin(dLat/2)**2+Math.cos(a[0]*rad)*Math.cos(b[0]*rad)*Math.sin(dLon/2)**2;return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
 function validPoint(point){return Array.isArray(point)&&point.length>=2&&Number.isFinite(point[0])&&Number.isFinite(point[1])&&Math.abs(point[0])<=180&&Math.abs(point[1])<=90;}
@@ -37,24 +37,36 @@ export function orientAndValidateRoute(geometry,start,end){
  if(Math.abs(geometry.length-170000)>50000)throw Error(`Extensão geométrica ${Math.round(geometry.length/1000)} km muito diferente dos 170 km de referência.`);
  return {coords:oriented,length:geometry.length,startError,endError,needsCalibration:true};
 }
-export function interpolatePK(pk,route){
+export function interpolatePK(pk,route,anchors=[]){
  if(!route||!Number.isFinite(pk)||pk<PK_START||pk>PK_END)return null;
- const fraction=(pk-PK_START)/(PK_END-PK_START);const target=route.length*fraction;
+ // A referenciação com marcos GNSS validados melhora a estimativa entre âncoras.
+ let references=[{pk:PK_START,along:0},{pk:PK_END,along:route.length},...anchors].filter(a=>Number.isFinite(a.pk)&&Number.isFinite(a.along)).sort((a,b)=>a.pk-b.pk);
+ const monotonic=[references[0]];
+ for(let i=1;i<references.length;i++){
+  const r=references[i];if(r.pk>monotonic[monotonic.length-1].pk&&r.along>monotonic[monotonic.length-1].along&&r.along<=route.length)monotonic.push(r);
+ }
+ if(monotonic[monotonic.length-1].pk!==PK_END)monotonic.push({pk:PK_END,along:route.length});
+ const right=monotonic.findIndex(r=>r.pk>=pk);
+ const hi=monotonic[Math.max(1,right)],lo=monotonic[Math.max(0,right-1)];
+ const target=lo.along+(hi.along-lo.along)*(pk-lo.pk)/(hi.pk-lo.pk);
  let dist=0;const cs=route.coords;
  for(let i=1;i<cs.length;i++){
   const step=metersBetween(cs[i-1],cs[i]);
   if(target<=dist+step||i===cs.length-1){const t=step===0?0:Math.max(0,Math.min(1,(target-dist)/step));
-   return {lat:cs[i-1][0]+t*(cs[i][0]-cs[i-1][0]),lng:cs[i-1][1]+t*(cs[i][1]-cs[i-1][1]),status:'Estimado pelo traçado',accuracy:'Não calibrado por marcos intermédios'};
+   return {lat:cs[i-1][0]+t*(cs[i][0]-cs[i-1][0]),lng:cs[i-1][1]+t*(cs[i][1]-cs[i-1][1]),status:'Estimado pelo traçado',accuracy:monotonic.length>2?'Calibração por GPS de campo disponível; validar PK no terreno':'Calibração apenas pelos dois limites; PK aproximado'};
   }dist+=step;
  }
  return null;
 }
-export function deriveAssetLocation(item, gpsOverrides, pkOverrides, route){
- const pk=pkOverrides[item.key]??item.pk;const manual=gpsOverrides[item.key];
- if(manual&&validGPS(manual.lat,manual.lng))return {...item,pk,lat:Number(manual.lat),lng:Number(manual.lng),gpsSaved:manual,gpsStatus:'Confirmado no terreno'};
- if(validGPS(item.lat,item.lng))return {...item,pk,lat:Number(item.lat),lng:Number(item.lng),gpsStatus:'GPS de origem'};
- const p=interpolatePK(parsePK(pk),route);
- return {...item,pk,lat:p?.lat??null,lng:p?.lng??null,gpsStatus:p?.status??'Sem coordenadas', gpsNote:p?.accuracy??'PK ou geometria por confirmar'};
+export function deriveAssetLocation(item, gpsOverrides, pkOverrides, route, osmMap={},anchors=[]){
+ const osm=osmMap[item.key];const pk=pkOverrides[item.key]??item.pk??osm?.estimatedPK;
+ const resolvedPK=pk||osm?.estimatedPK||'';
+ const manual=gpsOverrides[item.key];
+ if(manual&&validGPS(manual.lat,manual.lng))return {...item,pk:resolvedPK,lat:Number(manual.lat),lng:Number(manual.lng),gpsSaved:manual,gpsStatus:manual.origin==='manual'?'Coordenada introduzida — por validar':'Confirmado no terreno'};
+ if(validGPS(item.lat,item.lng))return {...item,pk:resolvedPK,lat:Number(item.lat),lng:Number(item.lng),gpsStatus:'GPS de origem'};
+ if(osm&&validGPS(osm.lat,osm.lng))return {...item,pk:resolvedPK,lat:osm.lat,lng:osm.lng,gpsStatus:osm.status,gpsNote:osm.note};
+ const p=interpolatePK(parsePK(resolvedPK),route,anchors);
+ return {...item,pk:resolvedPK,lat:p?.lat??null,lng:p?.lng??null,gpsStatus:p?.status??'Sem coordenadas', gpsNote:p?.accuracy??'Sem cartografia correspondente ao PK'};
 }
 export function downloadText(text,name,mime){const blob=new Blob([text],{type:mime});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);}
 export function makeKML(route,assets){
