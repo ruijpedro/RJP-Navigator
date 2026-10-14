@@ -8,7 +8,7 @@ export function verifyPreload(data){
  if(!c.every(v=>Array.isArray(v)&&v.length===2&&validGPS(v[0],v[1])&&v[0]>38.5&&v[0]<40.5&&v[1]>-9.8&&v[1]<-8.4))return null;
  if(metersBetween(c[0],START)>2500||metersBetween(c[c.length-1],END)>2500)return null;
  const p=(data.osmPoints||[]).filter(v=>validGPS(v.lat,v.lng)&&typeof v.id==='string').slice(0,15000);
- return {route:{...r,source:'osm',needsCalibration:true},osmPoints:p,source:data.source||'OpenStreetMap',createdAt:data.generatedAt};
+ return {route:{...r,source:r.source||'cartografia-importada',needsCalibration:true},osmPoints:p,source:data.source||'Cartografia ferroviária importada',createdAt:data.generatedAt};
 }
 export async function fetchBundledCartography(url,fetcher=fetch){
  try{const response=await fetcher(url,{cache:'default'});if(!response.ok)return null;return verifyPreload(await response.json());}catch{return null;}
