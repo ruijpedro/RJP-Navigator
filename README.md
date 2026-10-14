@@ -37,3 +37,11 @@ Converter dados vetoriais da ferrovia para GeoJSON de 1 LineString no CRS WGS84.
 
 ## Segurança
 Coordenadas ferroviárias não significam acessibilidade de viatura. Só abrir rotas automáticas para **acessos rodoviários confirmados e autorizados**. Não usar estimativas para aceder à via ferroviária.
+
+## Correção de instalação npm / GitHub Actions (14/10/2026)
+
+O workflow `.github/workflows/build-android.yml` inclui limpeza prévia de `node_modules` e `package-lock.json`, porque o repositório antigo continha um lockfile desatualizado com URLs de registry interno. Em seguida, configura o registry público npm e instala as dependências da V3.2.
+
+Se estiveres a atualizar um repositório já existente, substitui `.github/workflows/build-android.yml` pelo incluído neste ZIP e remove o antigo `package-lock.json` do repositório. O workflow faz a remoção também durante a execução, pelo que a APK não depende desta ação manual.
+
+O aviso de descontinuação `tar@6.2.1` é separado do erro `Exit handler never called!` e não implica, por si só, falha de compilação.
