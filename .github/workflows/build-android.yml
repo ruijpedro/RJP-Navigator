@@ -52,8 +52,12 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Preparar SDK Android
+      - name: Preparar SDK Android (sem pacote tools obsoleto)
         uses: android-actions/setup-android@v3
+        with:
+          # O valor predefinido da action inclui `tools`, removido do SDK.
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: 'false'
 
       - name: Criar projeto Android
         run: |
