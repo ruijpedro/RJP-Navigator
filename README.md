@@ -45,3 +45,15 @@ O workflow `.github/workflows/build-android.yml` inclui limpeza prévia de `node
 Se estiveres a atualizar um repositório já existente, substitui `.github/workflows/build-android.yml` pelo incluído neste ZIP e remove o antigo `package-lock.json` do repositório. O workflow faz a remoção também durante a execução, pelo que a APK não depende desta ação manual.
 
 O aviso de descontinuação `tar@6.2.1` é separado do erro `Exit handler never called!` e não implica, por si só, falha de compilação.
+
+
+## V3.2.2 — Correção da compilação Android SDK (14/10/2026)
+
+- Corrigido o erro `Warning: Failed to find package 'tools'` no GitHub Actions.
+- A ação `android-actions/setup-android@v3` deixa de tentar instalar o pacote SDK obsoleto `tools`.
+- Em vez disso, instala `platform-tools`, `platforms;android-35` e `build-tools;35.0.0`.
+- Mantém-se a correção npm da V3.2.1, o código ferroviário, os dados e os ícones.
+- Para compilar, envia os ficheiros deste ZIP para a raiz do repositório e executa
+  **Actions → Build RJP Navigator APK V3.2 → Run workflow**.
+- Esta correção foi validada na configuração do workflow, mas a APK requer
+  uma nova execução do GitHub Actions para confirmação.
