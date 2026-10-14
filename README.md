@@ -1,3 +1,22 @@
+# RJP Navigator V3.6 — Correção da ligação PK ↔ coordenadas GPS
+
+**Falha diagnosticada da V3.5:** `public/data/linha-oeste-preload.json` vinha com `ready:false`, `route:null` e `osmPoints:[]`. As tiles do mapa carregavam, mas não havia geometria com a qual converter `PK 115+350` em coordenadas. A descarga automática era exclusivamente Overpass e podia ser lenta/falhar.
+
+## Correções V3.6
+
+- Primeira tentativa de recolha do eixo por **API pública OpenStreetMap (GET `/api/0.6/relation/2076345/full`)**, reconvertendo o XML em vias reais e nós ligados; alternativa Overpass.
+- Geometria validada por conectividade e proximidade aos dois limites do troço, **sem criar coordenadas fictícias**.
+- Na aplicação, a obtenção do eixo já disponibiliza PK estimados sem esperar pelo download adicional de estações/PN; mostra o estado e permite tentar novamente quando falha.
+- Na compilação, `RJP_REQUIRE_MAPS=1` **não permite publicar uma APK anunciada como mapa integrado se o eixo não puder ser recolhido nem houver cache válida**. A compilação falhará explicitamente em caso de falha de rede/OSM; é preferível a produzir uma APK silenciosamente incompleta.
+- Se já houver um `linha-oeste-preload.json` com geometria válida, o processo conserva-o em falhas temporárias de rede.
+- Guarda sempre as correções e GPS recolhidos em campo; a pesquisa de acessos mantém Google Maps/Waze.
+
+**Estado do ZIP:** este pacote de código inclui o coletor, não um eixo já certificado. A aquisição do eixo deve acontecer no GitHub Actions (consultar o passo «Incluir mapa»). Se falhar, não instalar uma APK sem PK georreferenciados. Os testes unitários passaram, mas **a API não pôde ser consultada de ponta a ponta neste ambiente**. As localizações interpoladas são aproximadas, não servem para trabalho ferroviário sem confirmação. As coordenadas dos extremos têm CRS EPSG:3763 assumido (não confirmado).
+
+**Instruções:** extrair este ZIP para a raiz de `ruijpedro/RJP-Navigator`, substituir ficheiros existentes e executar `Build RJP Navigator APK V3.6` nas Actions. Verificar a mensagem `Mapa integrado:` na etapa de preparação e a presença de um ficheiro JSON não vazio em `public/data/` durante a compilação. Para instalar por cima da APK atual, manter o mesmo identificador e assinatura Android; se não, fazer backup JSON antes.
+
+---
+
 # RJP Navigator V3.5 — PK → estrada próxima → navegação
 
 A versão V3.5 acrescenta a pesquisa automática do ponto de estrada mais próximo de um PK pedido no troço **21+191–191+191** da Linha do Oeste. O traçado ferroviário pré-carregado na compilação (quando disponível) ou descarregado pela app fornece uma **estimativa** da coordenada do PK. Depois, a app obtém do OpenStreetMap vias rodoviárias próximas, exclui algumas categorias inadequadas, projeta a coordenada ferroviária na estrada, mostra a **distância em linha reta** e permite abrir a navegação de automóvel no Google Maps ou Waze.

@@ -10,6 +10,7 @@ import limite from './data/limites.json';
 import {PK_START,PK_END,parsePK,formatPK,validGPS,parseRouteGeoJSON,orientAndValidateRoute,interpolatePK,deriveAssetLocation,downloadText,makeKML} from './lib/rail.js';
 import {fetchOverpass,createRouteFromOSM,parseOSMAssets,associateOSM,closestOnRoute,REL_QUERY,ASSET_QUERY} from './lib/osm.js';
 import {fetchBundledCartography} from './lib/preload.js';
+import {getRailwayFromOSM} from './lib/osm-direct.js';
 import {findRoadAccess} from './lib/access.js';
 
 const REF_START={lat:limite.responsibility_segment.points[0].wgs84.latitude,lng:limite.responsibility_segment.points[0].wgs84.longitude};
@@ -156,7 +157,7 @@ function App(){
   const id=`extra-${Date.now()}`;const next=[{...form,id,key:id,linha:'Linha do Oeste',lat:gps?.lat||'',lng:gps?.lng||''},...extras];
   setExtras(next);persist(K.extras,next);setSelKey(id);changeTab('locais');setForm({categoria:'Passagem de Nível',nome:'',pk:'',localidade:'',concelho:'',freguesia:'',observacoes:''});}
  function registarDeslocacao(a){const next=[{id:Date.now(),data:new Date().toLocaleDateString('pt-PT'),hora:new Date().toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}),destino:a.titulo,pk:a.pk,gps:gps?coord(gps):''},...desloc];setDesloc(next);persist(K.desloc,next);setNotice('Deslocação registada.');}
- function exportarJSON(){downloadText(JSON.stringify({versao:'3.5.0',limites:limite,locaisExtras:extras,gpsAtivos,pkAtivos,accessos,deslocacoes:desloc,tracado:route,osmPontos:osmPoints},null,2),'RJP_Navigator_Linha_do_Oeste_Dados.json','application/json');}
+ function exportarJSON(){downloadText(JSON.stringify({versao:'3.6.0',limites:limite,locaisExtras:extras,gpsAtivos,pkAtivos,accessos,deslocacoes:desloc,tracado:route,osmPontos:osmPoints},null,2),'RJP_Navigator_Linha_do_Oeste_Dados.json','application/json');}
  function exportarCSV(){
   const data=[['Categoria','Designação','PK','Latitude','Longitude','Origem GPS','Observações'],...assets.map(a=>[a.categoria,a.titulo,a.pk||'',isPositioned(a)?Number(a.lat).toFixed(7):'',isPositioned(a)?Number(a.lng).toFixed(7):'',a.gpsStatus||'',a.gpsNote||a.observacoes||''])];
   const csv='\uFEFF'+data.map(line=>line.map(cell=>'"'+String(cell??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
@@ -173,24 +174,34 @@ function App(){
  async function atualizarCartografia(silent=false,preferredRoute=null,needAssets=true){
   if(loadingOSM)return;
   setLoadingOSM(true);setOsmError('');
-  if(!silent)setNotice('A descarregar a linha ferroviária real e os pontos OSM. Pode demorar até alguns minutos.');
+  if(!silent)setNotice('A procurar o traçado ferroviário na API OSM. Se falhar, será tentado o Overpass.');
   try{
    let activeRoute=preferredRoute||route;
+   let points=[...osmPoints];
    if(!activeRoute){
-    const res=await fetchOverpass(REL_QUERY);
-    activeRoute=createRouteFromOSM(res.elements,[REF_START.lat,REF_START.lng],[REF_END.lat,REF_END.lng]);
+    const response=await getRailwayFromOSM({start:[REF_START.lat,REF_START.lng],end:[REF_END.lat,REF_END.lng],overpassFetch:()=>fetchOverpass(REL_QUERY)});
+    activeRoute=response.route;
     if(!persist(K.route,activeRoute))throw Error('Sem espaço para guardar traçado.');
     setRoute(activeRoute);
+    setPreloadStatus(`PK ligados ao eixo OSM (${activeRoute.coords.length} vértices) — estimativas por validar`);
+    if(response.osmPoints.length){
+     const map=new Map([...points,...response.osmPoints].map(p=>[p.id,p]));
+     points=[...map.values()];persist(K.osm,points);setOsmPoints(points);
+    }
    }
-   let points=needAssets ? null : osmPoints;
-   if(needAssets){
-    const pointsRes=await fetchOverpass(ASSET_QUERY);
-    points=parseOSMAssets(pointsRes.elements);
-    if(points.length){persist(K.osm,points);setOsmPoints(points);}
+   // Os PK devem ficar imediatamente disponíveis, mesmo que a consulta de PN/estações falhe.
+   if(needAssets&&points.length<50){
+    try{
+     const pointsRes=await fetchOverpass(ASSET_QUERY);
+     const updated=parseOSMAssets(pointsRes.elements);
+     const combined=new Map([...points,...updated].map(p=>[p.id,p]));
+     points=[...combined.values()];
+     if(points.length){persist(K.osm,points);setOsmPoints(points);}
+    }catch(e){setNotice(`Eixo dos PK carregado. Algumas PN/estações não foram obtidas: ${e.message}`);}
    }
-   setPreloadStatus('Traçado carregado e guardado neste dispositivo');
-   setNotice(`Cartografia carregada: ${(activeRoute.length/1000).toFixed(1)} km de geometria e ${points?.length||0} elementos OSM. Coordenadas PK aproximadas.`);
-  }catch(e){setOsmError(e.message);setNotice(`Não foi possível atualizar cartografia: ${e.message}`);}
+   setPreloadStatus(`Traçado carregado: ${activeRoute.coords.length} vértices · PK aproximados disponíveis`);
+   if(!silent)setNotice(`Traçado da Linha do Oeste disponível. PK estimados ao longo do eixo; ${points.length} pontos cartográficos associados.`);
+  }catch(e){setOsmError(e.message);setPreloadStatus('Sem eixo da linha: PK intermédios ainda sem coordenadas.');setNotice(`Cartografia indisponível: ${e.message}`);}
   finally{setLoadingOSM(false);}
  }
  // Primeiro arranque: carregar o traçado que veio na APK/WebApp, antes de consultar a internet.
@@ -238,7 +249,7 @@ function App(){
 
  const selectedOnMap=consulta!==null&&consultPoint?{...consultPoint,key:`pk-consulta-${consulta}`,titulo:`PK ${formatPK(consulta)}`}:selKey&&isPositioned(current)?current:null;
  return <div className="app">
-  <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V3.5</span></h1><p>Linha do Oeste · PK 21+191 — PK 191+191</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
+  <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V3.6</span></h1><p>Linha do Oeste · PK 21+191 — PK 191+191</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
   <nav>{[['inicio','Início'],['locais','Locais'],['pn','Passagens de nível'],['km','PK/Km'],['mapa','Mapa ferroviário'],['novo','Novo local'],['desloc','Deslocações']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>changeTab(k)}>{t}</button>)}</nav>
   {notice&&<div className="notice" role="status">{notice}<button title="Fechar" onClick={()=>setNotice('')}>×</button></div>}
   <section className="quicksearch"><div><b>Localizar um quilómetro</b><small>Ex.: 115+350 — localizar o PK e a estrada mais próxima</small></div><input aria-label="PK a localizar" value={pkBusca} onChange={e=>setPkBusca(e.target.value)} onKeyDown={e=>e.key==='Enter'&&procurarPK()}/><button onClick={procurarPK}>Localizar PK</button></section>
@@ -257,7 +268,7 @@ function App(){
     {tab==='mapa'&&<section className="card map-card"><div className="map-head"><div><h2>Mapa da Linha do Oeste</h2><p>PK 21+191 — 191+191 · carregamento automático, sem importar ficheiros</p><p className="map-preload-status">{preloadStatus}{loadingOSM?' · a atualizar dados...':''}</p></div><a href={railMap(isPositioned(current)?current:REF_START)} target="_blank" rel="noreferrer" className="secondary-action">Mapa ferroviário externo ↗</a></div>
       <Mapa assets={assets} route={route} selected={selectedOnMap} onSelect={setSelection} roadAccess={chosenRoad} railTarget={consulta!==null?consultPoint:null}/>
       {consulta!==null&&<div className="result-box"><h3>PK {formatPK(consulta)} — estrada mais próxima</h3><p>{pkSearchStatus}</p>
-       {consultPoint?<p><b>Ponto ferroviário:</b> {Number(consultPoint.lat).toFixed(7)}, {Number(consultPoint.lng).toFixed(7)} <a href={pointMaps(consultPoint)} target="_blank" rel="noreferrer">Ver eixo no Google Maps</a></p>:<p>A obter coordenada ferroviária. Sem eixo válido não inventamos coordenadas.</p>}
+       {consultPoint?<p><b>Ponto ferroviário:</b> {Number(consultPoint.lat).toFixed(7)}, {Number(consultPoint.lng).toFixed(7)} <a href={pointMaps(consultPoint)} target="_blank" rel="noreferrer">Ver eixo no Google Maps</a></p>:<p>Sem coordenada para este PK. O mapa de fundo pode aparecer mesmo que a geometria ferroviária ainda não tenha carregado. Tenta «Tentar carregar o eixo OSM».</p>}
        {confirmedAccess&&<div className="road-confirmed"><strong>Acesso validado por ti para este PK</strong><p>{coord(confirmedAccess)} · {confirmedAccess.nota||'Sem notas'}</p><a href={routeMaps(confirmedAccess)} target="_blank" rel="noreferrer">Navegar para acesso validado</a></div>}
        {consultPoint&&<div className="road-result"><h3>Acesso rodoviário sugerido</h3>
         {accessLoading?<p>A procurar a estrada mais próxima e os tempos de condução...</p>:null}
@@ -279,7 +290,7 @@ function App(){
        <button onClick={exportarKML}>Exportar KML</button><button onClick={exportarCSV}>Exportar CSV com PN/EDF</button><a href="https://www.google.com/mymaps" target="_blank" rel="noreferrer">Abrir Google My Maps ↗</a>
        {route&&<button className="danger-secondary" onClick={()=>{if(confirm('Apagar o traçado importado? Os GPS guardados permanecerão intactos.')){persist(K.route,null);setRoute(null);}}}>Remover traçado</button>}
       </div><p className="footnote">Para ver <b>a linha e os pontos no Google Maps</b>, exporta o ficheiro KML e importa-o no Google My Maps. A aplicação Google Maps comum não aceita uma linha personalizada através de um simples link.</p>
-      {osmError&&<p className="warning">Erro de cartografia: {osmError}. Também podes importar um GeoJSON manualmente.</p>}
+      {osmError&&<div className="warning" role="alert"><b>Os PK ainda não têm coordenadas.</b> {osmError}<div className="actions"><button disabled={loadingOSM} onClick={()=>atualizarCartografia(false)}>{loadingOSM?'A tentar novamente...':'Tentar carregar o eixo OSM'}</button></div><p>O mapa de fundo não equivale ao eixo georreferenciado. Não será indicada uma estrada de acesso sem a localização ferroviária.</p></div>}
       <p className="footnote">Para confirmação topográfica, consultar a Infraestruturas de Portugal / dados.gov.pt (Rede Ferroviária Nacional), convertida para GeoJSON WGS84 e limitada ao teu troço. A importação requer uma LineString contínua no sentido de um dos extremos; dados projetados EPSG:3763 devem ser convertidos antes.</p>
      </section>}
     {current&&<section className="card detail"><div className="detail-title"><div><h2>{current.titulo}</h2><span className="pill">{current.categoria}</span></div><span className={`status ${current.gpsStatus==='Confirmado no terreno'?'confirmed':current.gpsStatus==='Estimado pelo traçado'?'estimated':''}`}>{current.gpsStatus}</span></div>
@@ -298,7 +309,7 @@ function App(){
   {tab==='desloc'&&<main className="card records"><h2>Deslocações e cópia de dados</h2><div className="actions"><button onClick={exportarJSON}>Exportar JSON</button><label className="file-action">Importar cópia JSON<input ref={jsonRef} type="file" accept="application/json,.json" onChange={e=>importarBackup(e.target.files?.[0])}/></label></div>
    {desloc.length===0?<p>Sem deslocações registadas.</p>:<div className="table-scroll"><table><thead><tr><th>Data</th><th>Hora</th><th>Destino</th><th>PK</th><th>GPS</th></tr></thead><tbody>{desloc.map(d=><tr key={d.id}><td>{d.data}</td><td>{d.hora}</td><td>{d.destino}</td><td>{d.pk}</td><td>{d.gps}</td></tr>)}</tbody></table></div>}
    <p className="footnote">Exporta um JSON antes de desinstalar ou limpar os dados da app. As coordenadas de campo, PK corrigidos e acessos são guardados localmente no dispositivo.</p></main>}
-  <footer>RJP Navigator V3.5 · Linha do Oeste · PK 21+191 a 191+191 · Cartografia OSM: coordenadas por PK aproximadas, validar no terreno · Não substitui os procedimentos de segurança ferroviária.</footer>
+  <footer>RJP Navigator V3.6 · Linha do Oeste · PK 21+191 a 191+191 · Cartografia OSM: coordenadas por PK aproximadas, validar no terreno · Não substitui os procedimentos de segurança ferroviária.</footer>
  </div>;
 }
 
