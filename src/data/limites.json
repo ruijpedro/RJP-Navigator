@@ -1,0 +1,56 @@
+{
+  "project": "RJP Navigator",
+  "railway_line": "Linha do Oeste",
+  "responsibility_segment": {
+    "start_pk": "21+191",
+    "end_pk": "191+191",
+    "pk_difference_m": 170000,
+    "points": [
+      {
+        "role": "start",
+        "pk": "21+191",
+        "pk_m": 21191,
+        "place": {
+          "district": "Lisboa",
+          "municipality": "Sintra",
+          "parish": "Belas"
+        },
+        "source_projected_coordinates": {
+          "x": -102518,
+          "y": -96007,
+          "crs_assumed": "EPSG:3763",
+          "crs_confirmed": false
+        },
+        "wgs84": {
+          "latitude": 38.79752688033888,
+          "longitude": -9.313184100692187
+        },
+        "source": "screenshot provided by user, 2026-10-14"
+      },
+      {
+        "role": "end",
+        "pk": "191+191",
+        "pk_m": 191191,
+        "place": {
+          "district": "Leiria",
+          "municipality": "Pombal",
+          "parish": "Carriço"
+        },
+        "source_projected_coordinates": {
+          "x": -58063,
+          "y": 38163,
+          "crs_assumed": "EPSG:3763",
+          "crs_confirmed": false
+        },
+        "wgs84": {
+          "latitude": 40.00997619214555,
+          "longitude": -8.813148027613115
+        },
+        "source": "screenshot provided by user, 2026-10-14"
+      }
+    ],
+    "geometry_status": "Only end reference points provided. Intermediate PKs must be located on georeferenced railway centerline calibrated by known PK markers; direct linear interpolation between endpoints is not valid.",
+    "routing_note": "Car access routes must target verified publicly accessible approach points, not track centerline coordinates."
+  },
+  "created_date": "2026-10-14"
+}

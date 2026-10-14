@@ -1,6 +1,1 @@
-{
-  "appId": "pt.rjp.navigator",
-  "appName": "RJP Navigator",
-  "webDir": "dist",
-  "bundledWebRuntime": false
-}
+{"appId":"pt.rjp.navigator","appName":"RJP Navigator","webDir":"dist","bundledWebRuntime":false}
