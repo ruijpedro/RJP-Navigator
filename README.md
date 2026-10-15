@@ -1,11 +1,11 @@
-# RJP Navigator V3.8 — Navegação na Rede Ferroviária Nacional
+# RJP Navigator V3.9 — Navegação na Rede Ferroviária Nacional
 
 WebApp instalável e aplicação Android (Capacitor). Desenvolvida sobre a V3.7.1, conserva a navegação da Linha do Oeste e acrescenta pesquisa de PK e aproximação rodoviária no separador **Rede nacional / PK**.
 
 ## Dados incluídos na aplicação
 
 - **Infraestruturas de Portugal / Shapefile fornecido pelo utilizador**, convertido para WGS84: **43 designações de linhas com geometria, 56 segmentos contínuos**, em `public/data/rede-ferroviaria-nacional.json`. Restam três registos originais sem geometria.
-- **Linha do Oeste**: 4 928 vértices no troço PK 21+191–191+191, incluídos em `public/data/linha-oeste-preload.json`. Mantém as 59 PN, estações e edifícios da base local.
+- **Linha do Oeste**: 4 928 vértices no troço PK 21+191–191+191, incluídos em `public/data/linha-oeste-preload.json`. Inclui 103 PN da listagem de 15/10/2026 (48 PK coincidentes, 55 novas; 11 antigas ausentes excluídas). Mantém as 38 estações/apeadeiros e os edifícios existentes.
 - **Referências quilométricas documentais pré-carregadas** (ver `src/lib/national.js`):
 
 | Linha/troço | Referências de PK usadas para estimar posição | Qualidade |
@@ -19,6 +19,14 @@ WebApp instalável e aplicação Android (Capacitor). Desenvolvida sobre a V3.7.
 
 **Importante:** a geometria IP não contém a quilometragem oficial de cada vértice. Os PK encontrados por interpolação não constituem levantamento topográfico; podem existir retificações e mudanças de quilometragem. Não apresentar como certificados.
 
+## Atualização de PN da Linha do Oeste — 15/10/2026
+
+- **Fonte recebida:** `docs/PN_LO_fonte_15-10-2026.xlsx`, apenas PK e tipo PN, 103 PK únicos.
+- **Base anterior:** 59 PN; 48 PK coincidentes mantidos com os nomes/localidades administrativos anteriores, ainda por validar; 55 PN novas sem nome/localidade/GPS no ficheiro recebido; 11 PK antigos que desapareceram da lista NÃO são incluídos.
+- **Âmbito geográfico:** 84 PN dentro do teu troço de responsabilidade (21+191 a 191+191) podem ser localizadas **aproximadamente** sobre o eixo ferroviário com a calibração atual. As outras 19 PN (192+055 a 214+096) são mostradas na lista, mas não recebem GPS interpolado até se calibrar a continuação da linha.
+- **Origem e segurança:** GPS confirmado em campo (quando existente) prevalece sobre coordenadas interpoladas. A existência de PN e a proximidade da estrada não garantem acesso rodoviário legal.
+- **Drive:** listagem de referência em `https://docs.google.com/spreadsheets/d/1_GS7TqQjbb59UJXeVv-woQk2ho7OqkE65JKAFB68VkE/edit`. Esta versão funciona **offline para dados ferroviários incluídos**, sem sincronização automática com o Drive.
+
 ## Como usar
 
 1. Abre **Rede nacional / PK**. Escolhe a **linha** e o **troço** (linhas com vários segmentos mantêm troços independentes).
@@ -30,7 +38,7 @@ WebApp instalável e aplicação Android (Capacitor). Desenvolvida sobre a V3.7.
 
 ### Sobre os dados de referência
 
-Fontes para os PK introduzidos na V3.8:
+Fontes para os PK introduzidos na V3.9:
 - [IP — Plano de Ação Linha do Norte I](https://www.infraestruturasdeportugal.pt/sites/default/files/ambiente-ruido/2020/norte_I.pdf)
 - [IP — Plano de Ação Linha do Minho I](https://www.infraestruturasdeportugal.pt/sites/default/files/ambiente-ruido/2020/minho_I.pdf)
 - [IP — Diretório da Rede 2019](https://www.infraestruturasdeportugal.pt/sites/default/files/inline-files/Diret%C3%B3rio%20da%20Rede%202019.pdf)
@@ -51,7 +59,7 @@ O `vite.config.js` já define a base de GitHub Pages na compilação de publica�
 
 ## Criar APK Android
 
-Em **Actions → Build RJP Navigator APK V3.8 → Run workflow**, espera pelo `android` verde e transfere o artefacto `RJP_Navigator_V3_8_APK`. O ID `pt.rjp.navigator` mantém-se; a instalação sobre a versão anterior depende também da assinatura Android. Exporta backups antes de substituir uma versão.
+Em **Actions → Build RJP Navigator APK V3.9 → Run workflow**, espera pelo `android` verde e transfere o artefacto `RJP_Navigator_V3_9_APK`. O ID `pt.rjp.navigator` mantém-se; a instalação sobre a versão anterior depende também da assinatura Android. Exporta backups antes de substituir uma versão.
 
 ## Testes do projeto
 
@@ -66,6 +74,6 @@ npm run build
 
 ## Limites reais
 
-- A V3.8 **não contém referências quilométricas validadas de todas as linhas**: seis troços têm referências documentais para uma **primeira estimativa**; nos restantes é necessário acrescentar pelo menos duas referências. Nunca apresenta um PK estimado como confirmado.
+- A V3.9 **não contém referências quilométricas validadas de todas as linhas**: seis troços têm referências documentais para uma **primeira estimativa**; nos restantes é necessário acrescentar pelo menos duas referências. Nunca apresenta um PK estimado como confirmado.
 - A base nacional de PN/EDF não está preenchida automaticamente para todas as linhas; os ativos da Linha do Oeste continuam na base existente, e podem ser acrescentados por linha nos restantes troços.
 - A proximidade de uma estrada ao eixo ferroviário não demonstra acessibilidade pública, legalidade de paragem, nem percurso pedonal seguro. Confirmar acesso antes de circular.
