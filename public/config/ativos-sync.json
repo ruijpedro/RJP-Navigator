@@ -1,6 +1,8 @@
+
 {
   "schema": "rjp-ativos-config-v1",
   "version": 1,
   "enabled": true,
   "feedUrl": "https://script.google.com/macros/s/AKfycbzhAriCg--t6d7QtBFzL_ld3MLsYXAo388z3cUeVfla_oQRxW5-RNOJuA9Thp3kzLPb/exec"
 }
+  
