@@ -12,6 +12,7 @@ import {fetchOverpass,createRouteFromOSM,parseOSMAssets,associateOSM,closestOnRo
 import {fetchBundledCartography} from './lib/preload.js';
 import {getRailwayFromOSM} from './lib/osm-direct.js';
 import {findRoadAccess} from './lib/access.js';
+import NationalNavigator from './NationalNavigator.jsx';
 
 const REF_START={lat:limite.responsibility_segment.points[0].wgs84.latitude,lng:limite.responsibility_segment.points[0].wgs84.longitude};
 const REF_END={lat:limite.responsibility_segment.points[1].wgs84.latitude,lng:limite.responsibility_segment.points[1].wgs84.longitude};
@@ -77,25 +78,7 @@ function Mapa({assets,route,selected,onSelect,roadAccess=null,railTarget=null}){
    <div className="leaflet-map" ref={el} aria-label="Mapa interativo da Linha do Oeste"></div>{err&&<div className="warning">{err}. <a href={railMap(REF_START)} target="_blank" rel="noreferrer">Abrir mapa ferroviário externo</a>.</div>}
    <p className="footnote">Eixo da Linha do Oeste incluído no pacote a partir da cartografia IP. Os PK intermédios são estimados por interpolação de quilometragem; GPS de campo validado tem prioridade. Acesso rodoviário tem de ser confirmado.</p></div>;
 }
-function MapaRede({linha}){
- const el=useRef(null),mapRef=useRef(null),group=useRef(null);
- useEffect(()=>{if(!el.current)return;
-  const map=L.map(el.current,{preferCanvas:true,scrollWheelZoom:false});
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
-  group.current=L.layerGroup().addTo(map);mapRef.current=map;map.setView([39.6,-8.5],7);
-  setTimeout(()=>map.invalidateSize(),100);
-  return()=>{map.remove();mapRef.current=null;group.current=null;};
- },[]);
- useEffect(()=>{if(!mapRef.current||!group.current||!linha)return;
-  group.current.clearLayers();const bounds=[];
-  for(const seg of linha.segmentos){if(!Array.isArray(seg.coords)||seg.coords.length<2)continue;
-   L.polyline(seg.coords,{color:'#007750',weight:4,opacity:.93}).bindPopup(`<strong>${linha.nome}</strong><br>${seg.segmento}`).addTo(group.current);
-   bounds.push(...seg.coords);
-  }
-  if(bounds.length)mapRef.current.fitBounds(L.latLngBounds(bounds).pad(.06),{maxZoom:13});
- },[linha]);
- return <div className="map-shell"><div className="leaflet-map national-map" ref={el} aria-label={`Mapa da ${linha?.nome||'Rede Ferroviária Nacional'}`}></div><p className="footnote">Eixo ferroviário de cartografia IP incluído no pacote; a localização dos PK noutras linhas exige quilometragem de referência e validação técnica.</p></div>;
-}
+
 function App(){
  const [tab,setTab]=useState('mapa'),[q,setQ]=useState(''),[tipo,setTipo]=useState('todos'),[selKey,setSelKey]=useState(''),[notice,setNotice]=useState('');
  const [redeNacional,setRedeNacional]=useState(null),[linhaSelecionada,setLinhaSelecionada]=useState('Linha do Oeste');
@@ -274,22 +257,12 @@ function App(){
 
  const selectedOnMap=consulta!==null&&consultPoint?{...consultPoint,key:`pk-consulta-${consulta}`,titulo:`PK ${formatPK(consulta)}`}:selKey&&isPositioned(current)?current:null;
  return <div className="app">
-  <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V3.7</span></h1><p>Rede Ferroviária Nacional · PK calibrados inicialmente na Linha do Oeste</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
-  <nav>{[['inicio','Início'],['locais','Locais'],['pn','Passagens de nível'],['km','PK/Km'],['mapa','Linha do Oeste'],['rede','Rede nacional'],['novo','Novo local'],['desloc','Deslocações']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>changeTab(k)}>{t}</button>)}</nav>
+  <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V3.8</span></h1><p>Rede Ferroviária Nacional · pesquisa de PK por linha e acessos rodoviários</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
+  <nav>{[['inicio','Início'],['locais','Locais'],['pn','Passagens de nível'],['km','PK/Km'],['mapa','Linha do Oeste'],['rede','Rede nacional / PK'],['novo','Novo local'],['desloc','Deslocações']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>changeTab(k)}>{t}</button>)}</nav>
   {notice&&<div className="notice" role="status">{notice}<button title="Fechar" onClick={()=>setNotice('')}>×</button></div>}
-  <section className="quicksearch"><div><b>Localizar um quilómetro</b><small>Ex.: 115+350 — localizar o PK e a estrada mais próxima</small></div><input aria-label="PK a localizar" value={pkBusca} onChange={e=>setPkBusca(e.target.value)} onKeyDown={e=>e.key==='Enter'&&procurarPK()}/><button onClick={procurarPK}>Localizar PK</button></section>
+  <section className="quicksearch"><div><b>Localizar um quilómetro da Linha do Oeste</b><small>Ex.: 115+350 · outras linhas em «Rede nacional / PK»</small></div><input aria-label="PK a localizar" value={pkBusca} onChange={e=>setPkBusca(e.target.value)} onKeyDown={e=>e.key==='Enter'&&procurarPK()}/><button onClick={procurarPK}>Localizar PK</button></section>
   {tab==='rede'&&<main className="rede-nacional-container"><section className="card">
-   <h2>Rede Ferroviária Nacional — cartografia integrada</h2>
-   <p>Geometrias fornecidas no Shapefile oficial. Seleciona uma linha para visualizar o seu traçado, mesmo sem ligação à API OSM. O mapa de fundo requer internet.</p>
-   <label className="national-selector">Linha ferroviária
-    <select value={linhaSelecionada} onChange={e=>setLinhaSelecionada(e.target.value)}>
-     {(redeNacional?.linhas||[]).map(l=><option key={l.nome} value={l.nome}>{l.nome}</option>)}
-    </select>
-   </label>
-   {redeNacional?<><p className="muted">{redeNacional.linhas.length} designações com geometria · {redeNacional.linhas.reduce((a,b)=>a+b.segmentos.length,0)} segmentos · {redeNacional.semGeometria?.length||0} registos sem geometria no ficheiro original.</p>
-    <MapaRede linha={redeNacional.linhas.find(l=>l.nome===linhaSelecionada)}/></>:<p>A carregar cartografia nacional incluída na aplicação...</p>}
-   <p className="warning"><strong>Atenção:</strong> a geometria existe para várias linhas, mas a pesquisa por PK e a associação de PN/EDF estão, nesta versão, calibradas apenas para a Linha do Oeste. As outras linhas precisam de marcos PK e bases de ativos próprias. A navegação rodoviária só termina em vias acessíveis verificadas.</p>
-   <button onClick={()=>{setLinhaSelecionada('Linha do Oeste');changeTab('mapa');}}>Voltar aos PK da Linha do Oeste</button>
+   {redeNacional?<NationalNavigator network={redeNacional} selectedLine={linhaSelecionada} onLineChange={setLinhaSelecionada} gps={gps} onGetGPS={obterGPS}/>:<p>A carregar geometrias da Rede Ferroviária Nacional incluídas na aplicação…</p>}
   </section></main>}
   {tab==='inicio'&&<main className="grid dashboard">
    <section className="card hero"><h2>O teu troço da Linha do Oeste</h2><p>Do PK <strong>21+191 (Belas / Sintra)</strong> ao PK <strong>191+191 (Carriço / Pombal)</strong>, com 170 km de referência.</p><p>O traçado ferroviário pode ser realçado no mapa. A geolocalização de cada PK exige geometria ferroviária georreferenciada e calibração.</p><div className="stats">{[['59','Passagens de nível'],['38','Estações / apeadeiros'],[String(countConfirmed),'GPS confirmados em campo'],[String(countEstimated),'Coordenadas por cartografia/estimativa'],[String(osmMatched),'Ativos associados ao OSM'],[route?'Disponível':'Pendente','Traçado georreferenciado']].map(([n,lab])=><div key={lab}><b>{n}</b><span>{lab}</span></div>)}</div></section>
@@ -347,7 +320,7 @@ function App(){
   {tab==='desloc'&&<main className="card records"><h2>Deslocações e cópia de dados</h2><div className="actions"><button onClick={exportarJSON}>Exportar JSON</button><label className="file-action">Importar cópia JSON<input ref={jsonRef} type="file" accept="application/json,.json" onChange={e=>importarBackup(e.target.files?.[0])}/></label></div>
    {desloc.length===0?<p>Sem deslocações registadas.</p>:<div className="table-scroll"><table><thead><tr><th>Data</th><th>Hora</th><th>Destino</th><th>PK</th><th>GPS</th></tr></thead><tbody>{desloc.map(d=><tr key={d.id}><td>{d.data}</td><td>{d.hora}</td><td>{d.destino}</td><td>{d.pk}</td><td>{d.gps}</td></tr>)}</tbody></table></div>}
    <p className="footnote">Exporta um JSON antes de desinstalar ou limpar os dados da app. As coordenadas de campo, PK corrigidos e acessos são guardados localmente no dispositivo.</p></main>}
-  <footer>RJP Navigator V3.7 · Linha do Oeste · PK 21+191 a 191+191 · Cartografia IP integrada: coordenadas PK estimadas, validar no terreno · Não substitui os procedimentos de segurança ferroviária.</footer>
+  <footer>RJP Navigator V3.8 · Rede Ferroviária Nacional · Linha do Oeste PK 21+191 a 191+191 · Cartografia IP integrada: coordenadas PK estimadas, validar no terreno · Não substitui os procedimentos de segurança ferroviária.</footer>
  </div>;
 }
 
