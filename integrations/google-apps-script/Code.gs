@@ -1,50 +1,39 @@
 /**
- * RJP Navigator V3.12 — leitura pública e SOMENTE LEITURA da folha PN_LO_Atual.
- * Colar em https://script.google.com/ , implementar como aplicação Web:
- * Executar como: Eu | Quem pode aceder: Qualquer pessoa.
- * A implementação publica APENAS as colunas de PN abaixo. Não acrescentar dados pessoais à folha.
+ * RJP Navigator V4.0 — endpoint SOMENTE LEITURA do inventário RFN.
+ * Fonte: Google Sheets "RJP Navigator - Ativos Ferroviários", separador "Ativos".
+ * IMPLEMENTAR: Executar como "Eu"; acesso "Qualquer pessoa" (apenas dados operacionais não confidenciais).
+ * AVISO: o endpoint publica os campos abaixo a qualquer pessoa que saiba o URL. Não introduzir dados pessoais/sensíveis na folha.
+ * Após alterações neste Code.gs, criar uma nova VERSÃO da implementação (não apenas guardar código).
  */
-const SHEET_ID = '1_GS7TqQjbb59UJXeVv-woQk2ho7OqkE65JKAFB68VkE';
-const TAB_NAME = 'PN_LO_Atual';
-const SCHEMA = 'rjp-pn-lo-v1';
-
-function doGet(e) {
-  // Callback reduzido a um único identificador seguro. Não aceita código JS arbitrário.
-  const callback = String((e && e.parameter && e.parameter.callback) || '');
-  if (!/^__rjpPnSync_[0-9]{10,15}_[a-z0-9]{1,15}$/.test(callback)) {
-    return ContentService.createTextOutput('/* Nome de callback inválido. */')
-      .setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }
-  let payload;
-  try {
-    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(TAB_NAME);
-    if (!sheet) throw Error('Separador PN_LO_Atual não encontrado');
-    const rows = sheet.getDataRange().getDisplayValues();
-    if (!rows.length) throw Error('Folha sem cabeçalhos');
-    const columns = rows.shift().map(value => String(value).trim().toLowerCase());
-    const column = name => columns.indexOf(name.toLowerCase());
-    const required = ['pk','designação','localidade','concelho','freguesia'];
-    if (required.some(name => column(name) < 0)) throw Error('Cabeçalhos PN_LO_Atual inesperados');
-    const val = (row, name) => {
-      const i=column(name);return i>=0 ? String(row[i] || '').trim() : '';
-    };
-    const active = rows.filter(row => String(row[column('pk')] || '').trim());
-    const parsed = active.map(row => ({
-      pk:val(row,'PK'),
-      nome:val(row,'Designação'),
-      localidade:val(row,'Localidade'),
-      concelho:val(row,'Concelho'),
-      freguesia:val(row,'Freguesia'),
-      lat:val(row,'Latitude'),
-      lng:val(row,'Longitude'),
-      observacoes:val(row,'Observações')
-    }));
-    // Nunca devolver dados pessoais de outras colunas, mesmo que existam na folha.
-    payload = {schema:SCHEMA,rows:parsed,generatedAt:new Date().toISOString()};
-  } catch (err) {
-    payload={schema:SCHEMA,error:String(err && err.message || err),rows:null};
-  }
-  // JSON.stringify impede que o conteúdo dos nomes das PN se torne JavaScript executável.
-  const js = `${callback}(${JSON.stringify(payload).replace(/</g,'\\u003c')});`;
-  return ContentService.createTextOutput(js).setMimeType(ContentService.MimeType.JAVASCRIPT);
+const SPREADSHEET_ID='1JBRHtWuFx-wMsCGimf28LhVVOjrL5mIX5Z_NGiJa0Dw';
+const SHEET_NAME='Ativos';
+const FEED_SCHEMA='rjp-ativos-rfn-v1';
+function doGet(e){
+ const callback=String(e?.parameter?.callback||'');
+ // O cliente V4 reutiliza o callback de transporte JSONP já existente.
+ if(!/^__rjpPnSync_[0-9]{10,15}_[a-z0-9]{1,15}$/.test(callback)){
+  return ContentService.createTextOutput('/* callback inválido */').setMimeType(ContentService.MimeType.JAVASCRIPT);
+ }
+ let payload;
+ try{
+  const sheet=SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
+  if(!sheet)throw Error('Separador Ativos não encontrado.');
+  const values=sheet.getDataRange().getDisplayValues();
+  if(values.length<2)throw Error('Tabela de ativos sem dados.');
+  const columns=values.shift().map(s=>String(s).trim().toLowerCase());
+  const find=n=>columns.indexOf(n.toLowerCase());
+  const required=['ID','Linha','Tipo','PK','Designação'];
+  if(required.some(n=>find(n)<0))throw Error('Cabeçalhos da tabela incorretos.');
+  const val=(row,n)=>{const i=find(n);return i>=0?String(row[i]||'').trim():'';};
+  const records=values.filter(row=>val(row,'ID')&&val(row,'Linha')).map(row=>({
+   id:val(row,'ID'),linha:val(row,'Linha'),tipo:val(row,'Tipo'),pk:val(row,'PK'),
+   nome:val(row,'Designação'),localidade:val(row,'Localidade'),concelho:val(row,'Concelho'),
+   freguesia:val(row,'Freguesia'),lat:val(row,'Latitude'),lng:val(row,'Longitude'),
+   estado:val(row,'Estado'),observacoes:val(row,'Observações'),fonte:val(row,'Fonte'),
+   atualizadoEm:val(row,'AtualizadoEm')
+  }));
+  payload={schema:FEED_SCHEMA,rows:records,generatedAt:new Date().toISOString()};
+ }catch(err){payload={schema:FEED_SCHEMA,error:String(err?.message||err),rows:null};}
+ return ContentService.createTextOutput(callback+'('+JSON.stringify(payload).replace(/</g,'\\u003c')+');')
+  .setMimeType(ContentService.MimeType.JAVASCRIPT);
 }

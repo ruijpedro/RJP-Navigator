@@ -1,0 +1,7 @@
+{
+  "schema": "rjp-ativos-config-v1",
+  "version": 1,
+  "enabled": false,
+  "feedUrl": "",
+  "notes": "ATIVAÇÃO ÚNICA: depois de publicar integrations/google-apps-script/Code.gs, definir enabled=true e introduzir o URL /exec. Não publicar credenciais."
+}

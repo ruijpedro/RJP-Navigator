@@ -23,3 +23,11 @@
 .pn-sync-fields input{flex:1;min-width:260px}
 .pn-sync-info{font-size:12px;background:#eaf5ed;border-radius:8px;padding:9px 12px;color:#195d3f;margin:10px 0 0}
 @media(max-width:650px){.pn-sync-heading{align-items:flex-start;flex-direction:column}.pn-sync-fields input{min-width:100%}}
+
+/* V4.0 — tabela nacional de ativos sincronizados */
+.asset-inventory{margin:0 0 20px;background:#f8faf9}.asset-inventory h2{margin-top:0}
+.asset-filters{grid-template-columns:minmax(180px,2fr) minmax(150px,1fr) minmax(190px,1fr)}
+.asset-list{display:grid;gap:6px;max-height:370px;overflow:auto;margin:10px 0}
+.asset-row{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;padding:10px 12px;border:1px solid #d4e6dc;border-radius:9px;background:#fff;color:#144834}
+.asset-row:hover{background:#e9f4ed}.asset-row small{display:block;color:#537767;margin-top:3px}.asset-row>span:last-child{font-size:12px;color:#387552;white-space:nowrap}
+@media(max-width:700px){.asset-filters{grid-template-columns:1fr}.asset-row{flex-wrap:wrap}.asset-row>span:last-child{white-space:normal}}

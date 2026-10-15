@@ -3,5 +3,5 @@
   "version": 1,
   "enabled": false,
   "feedUrl": "",
-  "notes": "ATIVAÇÃO ÚNICA: após publicar o Google Apps Script, define enabled=true e cola o URL /exec em feedUrl. Sem dados secretos."
+  "notes": "Legado V3.12. Na V4 usar /config/ativos-sync.json para PN, PH, PS e todos os outros ativos."
 }

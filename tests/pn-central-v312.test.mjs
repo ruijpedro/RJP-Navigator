@@ -44,10 +44,10 @@ test('central: ficheiro entregue está desativado até o utilizador publicar o A
 });
 test('central: a UI não exige configurar URL em cada aparelho',()=>{
  const main=readFileSync(new URL('../src/main.jsx',import.meta.url),'utf8');
- assert.match(main,/fetchPNCentralConfig\(/);
+ assert.match(main,/fetchAssetsCentralConfig\(/);
  assert.match(main,/Sincronizar agora/);
  assert.doesNotMatch(main,/Guardar ligação|Configuração única por instalação|pnFeedEdit/);
- assert.match(main,/PN_SYNC_INTERVAL_MS/);
+ assert.match(main,/ASSETS_SYNC_INTERVAL_MS/);
  const sw=readFileSync(new URL('../public/sw.js',import.meta.url),'utf8');
  assert.match(sw,/config\/pn-sync.json/);
  assert.match(sw,/cache: 'no-store'/);

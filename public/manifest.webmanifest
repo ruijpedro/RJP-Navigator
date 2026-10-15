@@ -1,7 +1,7 @@
 {
   "name": "RJP Navigator — Rede Nacional",
   "short_name": "RJP Nav",
-  "description": "Navegação técnica ferroviária: pesquisa de PK por linha e acesso rodoviário.",
+  "description": "Inventário e navegação de ativos ferroviários: PN, PH, PS, PI, atravessamentos, valetas, geotecnia e obras de arte.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",

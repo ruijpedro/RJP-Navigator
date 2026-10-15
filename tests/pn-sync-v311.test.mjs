@@ -77,8 +77,8 @@ test('carrega JSONP sem CORS e liberta callback e elemento quando recebe respost
 
 test('Apps Script aponta para a folha e não contém operações de escrita',()=>{
  const code=readFileSync(new URL('../integrations/google-apps-script/Code.gs',import.meta.url),'utf8');
- assert.match(code,/PN_LO_Atual/);
- assert.match(code,/1_GS7TqQjbb59UJXeVv-woQk2ho7OqkE65JKAFB68VkE/);
+ assert.match(code,/SHEET_NAME='Ativos'/);
+ assert.match(code,/1JBRHtWuFx-wMsCGimf28LhVVOjrL5mIX5Z_NGiJa0Dw/);
  assert.match(code,/getDisplayValues\(/);
  assert.doesNotMatch(code,/\.setValues\(|\.appendRow\(|function\s+doPost\s*\(/);
 });
@@ -90,6 +90,6 @@ test('Base embutida conserva a designação confirmada no Drive para PK 45+850',
 test('UI importa o hook useCallback usado pela sincronização',()=>{
  const code=readFileSync(new URL('../src/main.jsx',import.meta.url),'utf8');
  assert.match(code,/import\s+React,\{[^}]*\buseCallback\b[^}]*\}\s+from\s+['"]react['"]/);
- assert.match(code,/const\s+atualizarPN\s*=\s*useCallback\(/);
+ assert.match(code,/const\s+atualizarAtivos\s*=\s*useCallback\(/);
  assert.match(code,/Sincronizar agora/);
 });

@@ -3,6 +3,7 @@ import L from 'leaflet';
 import {parsePK,formatPK,validGPS,downloadText,metersBetween} from './lib/rail.js';
 import {segmentKey,defaultCalibration,geometryProfile,pointAt,locateNationalPK,locateGeometricDistance,calibrationReferences,nearestOnProfile,resolveNationalLinePK} from './lib/national.js';
 import {findRoadAccess} from './lib/access.js';
+import {ASSET_TYPES,assetIsActive} from './lib/assets-sync.js';
 
 const LS_CAL='rjp_nav_nacional_calibracoes_v38';
 const LS_POIS='rjp_nav_nacional_ativos_v38';
@@ -47,7 +48,7 @@ function NationalMap({linha,segmentIndex,target,road,points=[],onPickRail}){
  return <div className="map-shell"><div className="leaflet-map national-map" ref={el} aria-label="Mapa ferroviário nacional interativo"/><p className="footnote">Toca no eixo verde para escolher um ponto, mesmo numa linha sem PK calibrados. Cartografia IP integrada; mapa de fundo e pesquisa de estradas precisam de internet. A linha tracejada não é caminho pedonal.</p></div>;
 }
 
-export default function NationalNavigator({network,selectedLine,onLineChange,gps,onGetGPS}){
+export default function NationalNavigator({network,selectedLine,onLineChange,gps,onGetGPS,centralAssets=[],showInventory=false}){
  const [segmentIndex,setSegmentIndex]=useState(0);
  const [calibrations,setCalibrations]=useState(()=>load(LS_CAL,{}));
  const [pois,setPois]=useState(()=>load(LS_POIS,[]));
@@ -57,6 +58,10 @@ export default function NationalNavigator({network,selectedLine,onLineChange,gps
  const [refPK,setRefPK]=useState(''),[refMode,setRefMode]=useState('gps'),[refLat,setRefLat]=useState(''),[refLng,setRefLng]=useState(''),[refSource,setRefSource]=useState('');
  const [poiName,setPoiName]=useState(''),[poiPK,setPoiPK]=useState(''),[poiType,setPoiType]=useState('Passagem de Nível');
  const requestToken=useRef(0);
+ const [assetQuery,setAssetQuery]=useState(''),[assetType,setAssetType]=useState('TODOS'),[assetLine,setAssetLine]=useState('TODAS'),[pendingAsset,setPendingAsset]=useState(null);
+ const assetTypes=useMemo(()=>[...new Set(centralAssets.map(a=>a.tipo))].sort(),[centralAssets]);
+ const assetLines=useMemo(()=>[...new Set(centralAssets.map(a=>a.linha))].sort(),[centralAssets]);
+ const visibleAssets=useMemo(()=>centralAssets.filter(assetIsActive).filter(a=>(assetType==='TODOS'||a.tipo===assetType)&&(assetLine==='TODAS'||a.linha===assetLine)&&[a.id,a.nome,a.pk,a.localidade,a.concelho,a.linha,a.tipo].join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(assetQuery.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase())).sort((a,b)=>a.linha.localeCompare(b.linha,'pt')||((parsePK(a.pk)||0)-(parsePK(b.pk)||0))),[centralAssets,assetType,assetLine,assetQuery]);
  const networkLine=network?.linhas?.find(l=>l.nome===selectedLine)||null;
  const segments=networkLine?.segmentos||[];
  const segment=segments[segmentIndex]||null;
@@ -68,6 +73,7 @@ export default function NationalNavigator({network,selectedLine,onLineChange,gps
  const locatable=refs.references.length>=2&&!refs.error;
  const relevantPOI=useMemo(()=>pois.filter(p=>p.segmentKey===key).map(p=>({...p,location:profile?locateNationalPK(p.pk,profile,calibration):{}})).map(p=>({...p,lat:p.location.lat??null,lng:p.location.lng??null})),[pois,key,profile,calibration]);
  const chosenRoad=roadResult?.alternatives?.find(a=>a.id===roadChoice)||roadResult?.recommended||null;
+ const centralMapPoints=useMemo(()=>centralAssets.filter(a=>a.linha===selectedLine&&assetIsActive(a)&&validGPS(a.lat,a.lng)).map(a=>({lat:a.lat,lng:a.lng,nome:a.nome||a.id,pk:a.pk})),[centralAssets,selectedLine]);
  const savedRoad=result?.pk!=null?accesses[`${key}|${result.pk}`]:null;
  const calibratedSegments=useMemo(()=>segments.filter((s,i)=>{try{const p=geometryProfile(s.coords);return calibrationReferences(p,calibrations[segmentKey(selectedLine,i)]??defaultCalibration(selectedLine,i)).references.length>=2;}catch{return false;}}).length,[segments,selectedLine,calibrations]);
 
@@ -109,6 +115,27 @@ export default function NationalNavigator({network,selectedLine,onLineChange,gps
   showLocated(located,`PK ${located.displayPK} estimado sobre a geometria ferroviária (${strCoord(located)}); validar em campo.`);
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[pendingLocate,segmentIndex,profile,calibration]);
+ function resolveInventoryAsset(a){
+  setPkText(a.pk||'');
+  const label=`${a.tipo} · ${a.nome||a.id} (${a.linha}${a.pk?', PK '+a.pk:''})`;
+  if(validGPS(a.lat,a.lng)){
+   const loc={lat:Number(a.lat),lng:Number(a.lng),pk:a.pk?parsePK(a.pk):null,displayPK:a.pk||null,source:'google-sheet',assetId:a.id};
+   showLocated(loc,label+' — GPS indicado na tabela central; confirmar exatidão e autorização do acesso no terreno.');return;
+  }
+  if(!a.pk){cancelRoad();setResult(null);setMessage(label+' — sem PK ou GPS. Preenche pelo menos uma localização na folha Google Sheets.');return;}
+  const r=resolveNationalLinePK(a.pk,selectedLine,segments,calibrations,segmentIndex);
+  if(r.error){cancelRoad();setResult(null);setMessage(label+' — '+r.error+' Acrescenta GPS validado ou referências de calibração.');return;}
+  if(r.segmentIndex!==segmentIndex){setSegmentIndex(r.segmentIndex);setPendingLocate({pk:a.pk,index:r.segmentIndex});return;}
+  showLocated(r.location,label+' — PK calculado por interpolação; validar com marcos/GPS em campo.');
+ }
+ function pickInventoryAsset(asset){
+  if(!network?.linhas?.some(l=>l.nome===asset.linha)){setMessage(`A linha ${asset.linha} não consta da cartografia incluída; o ativo permanece na tabela.`);return;}
+  if(asset.linha!==selectedLine){setPendingAsset(asset);onLineChange(asset.linha);return;}
+  resolveInventoryAsset(asset);
+ }
+ useEffect(()=>{if(pendingAsset&&pendingAsset.linha===selectedLine){const asset=pendingAsset;setPendingAsset(null);resolveInventoryAsset(asset);}
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[selectedLine,pendingAsset]);
  function locateGeom(){if(!profile)return;
   const v=Number(geomText.trim().replace(',','.'));const r=locateGeometricDistance(v,profile);
   if(r.error){cancelRoad();setResult(null);setMessage(r.error);return;}
@@ -148,6 +175,13 @@ export default function NationalNavigator({network,selectedLine,onLineChange,gps
   if(save(LS_CAL,j.calibrations)&&save(LS_POIS,j.pois)&&save(LS_ROADS,j.accesses)){setCalibrations(j.calibrations);setPois(j.pois);setAccesses(j.accesses);cancelRoad();setResult(null);setMessage('Backup nacional importado.');}}
   catch(e){setMessage('Importação falhou: '+e.message);}}
  return <div className="national-nav">
+  {showInventory&&<section className="national-panel asset-inventory" aria-label="Inventário de ativos ferroviários">
+   <h2>Ativos ferroviários · tabela única</h2>
+   <p>Filtra e seleciona um ativo para localizar a infraestrutura na via e procurar automaticamente o acesso rodoviário. Os dados vêm da base central ou da última cópia offline. GPS da folha prevalece sobre PK estimado.</p>
+   <div className="national-fields asset-filters"><label>Pesquisar ID, nome, PK, localidade<input aria-label="Pesquisar ativo" value={assetQuery} onChange={e=>setAssetQuery(e.target.value)} placeholder="Ex.: PH, 115+350, nome…"/></label><label>Tipo<select value={assetType} onChange={e=>setAssetType(e.target.value)}><option value="TODOS">Todos os tipos</option>{assetTypes.map(t=><option key={t} value={t}>{t} — {ASSET_TYPES[t]||t}</option>)}</select></label><label>Linha<select value={assetLine} onChange={e=>setAssetLine(e.target.value)}><option value="TODAS">Todas as linhas</option>{assetLines.map(l=><option key={l} value={l}>{l}</option>)}</select></label></div>
+   <p className="footnote">{visibleAssets.length} registos encontrados · a lista apresenta até 200 de cada vez.</p>
+   <div className="asset-list">{visibleAssets.slice(0,200).map(a=><button type="button" className="asset-row" key={a.id} onClick={()=>pickInventoryAsset(a)}><span><strong>{a.tipo} · {a.nome||a.id}</strong><small>{a.linha} · {a.pk?'PK '+a.pk:'Sem PK'} · {a.id}</small></span><span>{validGPS(a.lat,a.lng)?'GPS na folha':a.pk?'PK por estimar':'Sem posição'} ↗</span></button>)}{!visibleAssets.length&&<p>Sem ativos correspondentes aos filtros.</p>}</div>
+  </section>}
   <h2>Rede Ferroviária Nacional — PK → estrada → navegação</h2>
   <p>Seleciona a linha, introduz o PK e a pesquisa da estrada começa automaticamente quando a posição ferroviária é calculável. <strong>Em qualquer linha</strong> também podes tocar no eixo verde do mapa para obter uma aproximação rodoviária, mesmo sem PK calibrados.</p>
   <div className="national-fields">
@@ -166,10 +200,10 @@ export default function NationalNavigator({network,selectedLine,onLineChange,gps
     <button className="secondary-btn" onClick={locateGeom}>Localizar e procurar estrada</button>
    </div>
    {message&&<p className="national-message" role="status">{message}</p>}
-   <NationalMap linha={networkLine} segmentIndex={segmentIndex} target={result} road={chosenRoad} points={relevantPOI} onPickRail={pickRail}/>
+   <NationalMap linha={networkLine} segmentIndex={segmentIndex} target={result} road={chosenRoad} points={[...relevantPOI,...centralMapPoints]} onPickRail={pickRail}/>
    {result?.lat&&<section className="result-box national-road-card" aria-label="Resultado PK e acesso rodoviário">
     <h3>{result.displayPK?'PK '+result.displayPK:'Ponto no eixo ferroviário'} — estrada mais próxima</h3>
-    <p>{result.displayPK?'PK aproximado sobre a geometria ferroviária; confirmar com marcos/levantamento de campo antes de utilizar em obra.':'Localização por distância geométrica ou toque no mapa; NÃO corresponde a um PK oficial.'}</p>
+    <p>{result.source==='google-sheet'?'Coordenada GPS fornecida pela base central; confirmar no terreno antes de usar em obra.':result.displayPK?'PK aproximado sobre a geometria ferroviária; confirmar com marcos/levantamento de campo antes de utilizar em obra.':'Localização por distância geométrica ou toque no mapa; NÃO corresponde a um PK oficial.'}</p>
     <p><strong>Ponto ferroviário:</strong> {strCoord(result)} <a href={`https://www.google.com/maps/search/?api=1&query=${result.lat}%2C${result.lng}`} target="_blank" rel="noreferrer">Ver eixo no Google Maps</a></p>
     {savedRoad&&<div className="road-confirmed"><strong>Acesso anteriormente validado por ti</strong><p>{savedRoad.name||'Via sem nome'} · {strCoord(savedRoad)}</p><div className="actions"><a href={googleRoute(savedRoad)} target="_blank" rel="noreferrer">Google Maps — acesso validado</a><a href={waze(savedRoad)} target="_blank" rel="noreferrer">Waze — acesso validado</a></div></div>}
     <div className="road-result"><h3>Acesso rodoviário sugerido</h3>
