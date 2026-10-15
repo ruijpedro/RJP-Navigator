@@ -1,4 +1,4 @@
-name: Build RJP Navigator APK V3.9
+name: Build RJP Navigator APK V3.10
 
 on:
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
           npm config set registry https://registry.npmjs.org/
           npm config get registry
 
-      - name: Instalar dependências da V3.9
+      - name: Instalar dependências da V3.10
         run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps --package-lock=false --fetch-retries=4
 
       - name: Executar testes
@@ -102,7 +102,7 @@ jobs:
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: RJP_Navigator_V3_9_APK
+          name: RJP_Navigator_V3_10_APK
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
@@ -126,7 +126,7 @@ jobs:
           npm cache clean --force
           npm config set registry https://registry.npmjs.org/
 
-      - name: Instalar dependências da V3.9
+      - name: Instalar dependências da V3.10
         run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps --package-lock=false --fetch-retries=4
 
       - name: Executar testes
@@ -143,6 +143,6 @@ jobs:
       - name: Publicar WebApp
         uses: actions/upload-artifact@v4
         with:
-          name: RJP_Navigator_V3_9_WebApp
+          name: RJP_Navigator_V3_10_WebApp
           path: dist/
           if-no-files-found: error
