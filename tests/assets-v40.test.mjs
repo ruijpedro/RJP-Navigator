@@ -48,7 +48,8 @@ test('V4 usa configuração central sem URL por aparelho',async()=>{
  const output=await fetchAssetsCentralConfig({urls:['https://test.local/config'],fetcher:async()=>({ok:true,json:async()=>({schema:ASSETS_CONFIG_SCHEMA,enabled:false,feedUrl:''})})});
  assert.equal(output.enabled,false);
  const shipped=JSON.parse(readFileSync(new URL('../public/config/ativos-sync.json',import.meta.url),'utf8'));
- assert.equal(shipped.enabled,false);
+ assert.equal(shipped.enabled,true);
+assert.match(shipped.feedUrl, /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/);
 });
 test('V4 usa um endpoint Google Apps Script só de leitura para uma tabela Ativos',()=>{
  const src=readFileSync(new URL('../integrations/google-apps-script/Code.gs',import.meta.url),'utf8');
