@@ -1,0 +1,7 @@
+{
+  "schema": "rjp-pn-sync-config-v1",
+  "version": 1,
+  "enabled": false,
+  "feedUrl": "",
+  "notes": "ATIVAÇÃO ÚNICA: após publicar o Google Apps Script, define enabled=true e cola o URL /exec em feedUrl. Sem dados secretos."
+}

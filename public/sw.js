@@ -1,5 +1,5 @@
-/* RJP Navigator WebApp V3.10: app e geometria ferroviária locais. */
-const CACHE = 'rjp-navigator-webapp-v3-10-0';
+/* RJP Navigator WebApp V3.12: app e geometria ferroviária locais. */
+const CACHE = 'rjp-navigator-webapp-v3-12-0';
 const BASE = new URL(self.registration.scope);
 const required = [
   '', 'index.html', 'manifest.webmanifest', 'favicon.png',
@@ -22,6 +22,11 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== BASE.origin || !url.pathname.startsWith(BASE.pathname)) return;
+  // A configuração das PN é dinâmica: nunca servir uma versão antiga da cache offline.
+  if (url.pathname.endsWith('/config/pn-sync.json')) {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
+    return;
+  }
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).then(response => {
       if (response.ok) { const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(request, copy)); }

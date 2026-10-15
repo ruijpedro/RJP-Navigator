@@ -14,7 +14,7 @@ const rows = `
 38+425~~~~
 41+715~Juromelo~Juromelo~Sobral de Monte Agraço~Sapatatia
 45+134~~~~
-45+850~Saparatia~Saparatia~Sobral de Monte Agraço~Sapatatia
+45+850~Sapataria~Sapataria~Sobral de Monte Agraço~Sapataria
 46+973~~~~
 47+958~P. Negro~P. Negro~Sobral de Monte Agraço~Sapatatia
 49+538~~~~

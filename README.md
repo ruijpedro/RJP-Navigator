@@ -1,4 +1,4 @@
-# RJP Navigator V3.10 — Navegação na Rede Ferroviária Nacional
+# RJP Navigator V3.12 — Navegação na Rede Ferroviária Nacional
 
 WebApp instalável e aplicação Android (Capacitor). Desenvolvida sobre a V3.7.1, conserva a navegação da Linha do Oeste e acrescenta pesquisa de PK e aproximação rodoviária no separador **Rede nacional / PK**.
 
@@ -25,7 +25,7 @@ WebApp instalável e aplicação Android (Capacitor). Desenvolvida sobre a V3.7.
 - **Base anterior:** 59 PN; 48 PK coincidentes mantidos com os nomes/localidades administrativos anteriores, ainda por validar; 55 PN novas sem nome/localidade/GPS no ficheiro recebido; 11 PK antigos que desapareceram da lista NÃO são incluídos.
 - **Âmbito geográfico:** 84 PN dentro do teu troço de responsabilidade (21+191 a 191+191) podem ser localizadas **aproximadamente** sobre o eixo ferroviário com a calibração atual. As outras 19 PN (192+055 a 214+096) são mostradas na lista, mas não recebem GPS interpolado até se calibrar a continuação da linha.
 - **Origem e segurança:** GPS confirmado em campo (quando existente) prevalece sobre coordenadas interpoladas. A existência de PN e a proximidade da estrada não garantem acesso rodoviário legal.
-- **Drive:** listagem de referência em `https://docs.google.com/spreadsheets/d/1_GS7TqQjbb59UJXeVv-woQk2ho7OqkE65JKAFB68VkE/edit`. Esta versão funciona **offline para dados ferroviários incluídos**, sem sincronização automática com o Drive.
+- **Drive:** listagem de referência em `https://docs.google.com/spreadsheets/d/1_GS7TqQjbb59UJXeVv-woQk2ho7OqkE65JKAFB68VkE/edit`. Esta versão guarda os dados ferroviários offline e suporta sincronização centralizada das PN do Drive após a ativação única descrita em `GUIA-SINCRONIZACAO-PN.md`.
 
 ## Como usar
 
@@ -38,7 +38,7 @@ WebApp instalável e aplicação Android (Capacitor). Desenvolvida sobre a V3.7.
 
 ### Sobre os dados de referência
 
-Fontes para os PK introduzidos na V3.10:
+Fontes para os PK introduzidos na V3.12:
 - [IP — Plano de Ação Linha do Norte I](https://www.infraestruturasdeportugal.pt/sites/default/files/ambiente-ruido/2020/norte_I.pdf)
 - [IP — Plano de Ação Linha do Minho I](https://www.infraestruturasdeportugal.pt/sites/default/files/ambiente-ruido/2020/minho_I.pdf)
 - [IP — Diretório da Rede 2019](https://www.infraestruturasdeportugal.pt/sites/default/files/inline-files/Diret%C3%B3rio%20da%20Rede%202019.pdf)
@@ -59,7 +59,7 @@ O `vite.config.js` já define a base de GitHub Pages na compilação de publica�
 
 ## Criar APK Android
 
-Em **Actions → Build RJP Navigator APK V3.10 → Run workflow**, espera pelo `android` verde e transfere o artefacto `RJP_Navigator_V3_10_APK`. O ID `pt.rjp.navigator` mantém-se; a instalação sobre a versão anterior depende também da assinatura Android. Exporta backups antes de substituir uma versão.
+Em **Actions → Build RJP Navigator APK V3.12 → Run workflow**, espera pelo `android` verde e transfere o artefacto `RJP_Navigator_V3_12_APK`. O ID `pt.rjp.navigator` mantém-se; a instalação sobre a versão anterior depende também da assinatura Android. Exporta backups antes de substituir uma versão.
 
 ## Testes do projeto
 
@@ -74,6 +74,16 @@ npm run build
 
 ## Limites reais
 
-- A V3.10 **não contém referências quilométricas validadas de todas as linhas**: seis troços têm referências documentais para uma **primeira estimativa**; nos restantes é necessário acrescentar pelo menos duas referências. Nunca apresenta um PK estimado como confirmado.
+- A V3.12 **não contém referências quilométricas validadas de todas as linhas**: seis troços têm referências documentais para uma **primeira estimativa**; nos restantes é necessário acrescentar pelo menos duas referências. Nunca apresenta um PK estimado como confirmado.
 - A base nacional de PN/EDF não está preenchida automaticamente para todas as linhas; os ativos da Linha do Oeste continuam na base existente, e podem ser acrescentados por linha nos restantes troços.
 - A proximidade de uma estrada ao eixo ferroviário não demonstra acessibilidade pública, legalidade de paragem, nem percurso pedonal seguro. Confirmar acesso antes de circular.
+
+## V3.12 — PN corrigíveis pelo Google Drive sem atualizar APK
+
+- A lista de PN pode ser consultada a partir da folha central `PN_LO_Atual` usando o Apps Script incluído (somente leitura).
+- Depois da configuração inicial do URL `/exec` no menu das PN, os nomes e outros dados corrigidos no Drive chegam à Android/WebApp ao abrir, ao regressar ao primeiro plano e a cada 15 minutos.
+- O estado offline preserva o último conjunto válido de PN.
+- **Lê `GUIA-SINCRONIZACAO-PN.md` para ativar a sincronização central; depois nenhum telemóvel exige configuração manual.**
+
+### V3.12 — Configuração única para todos os dispositivos
+A APK e a WebApp consultam `https://ruijpedro.github.io/RJP-Navigator/config/pn-sync.json`. **Após publicares o Apps Script uma vez, coloca o URL `/exec` nesse ficheiro e ativa `enabled: true`.** Cada dispositivo sincroniza automaticamente sem introduzir URLs. O ZIP inclui a configuração ainda **desativada** até terminares essa publicação inicial. Consulta `GUIA-SINCRONIZACAO-PN.md`.
