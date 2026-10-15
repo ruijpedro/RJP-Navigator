@@ -1,5 +1,5 @@
-/* RJP Navigator WebApp V3.9: app e geometria ferroviária locais. */
-const CACHE = 'rjp-navigator-webapp-v3-9-0';
+/* RJP Navigator WebApp V3.10: app e geometria ferroviária locais. */
+const CACHE = 'rjp-navigator-webapp-v3-10-0';
 const BASE = new URL(self.registration.scope);
 const required = [
   '', 'index.html', 'manifest.webmanifest', 'favicon.png',

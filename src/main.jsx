@@ -257,7 +257,7 @@ function App(){
 
  const selectedOnMap=consulta!==null&&consultPoint?{...consultPoint,key:`pk-consulta-${consulta}`,titulo:`PK ${formatPK(consulta)}`}:selKey&&isPositioned(current)?current:null;
  return <div className="app">
-  <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V3.9</span></h1><p>Rede Ferroviária Nacional · pesquisa de PK por linha e acessos rodoviários</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
+  <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V3.10</span></h1><p>Rede Ferroviária Nacional · pesquisa de PK por linha e acessos rodoviários</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
   <nav>{[['inicio','Início'],['locais','Locais'],['pn','Passagens de nível'],['km','PK/Km'],['mapa','Linha do Oeste'],['rede','Rede nacional / PK'],['novo','Novo local'],['desloc','Deslocações']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>changeTab(k)}>{t}</button>)}</nav>
   {notice&&<div className="notice" role="status">{notice}<button title="Fechar" onClick={()=>setNotice('')}>×</button></div>}
   <section className="quicksearch"><div><b>Localizar um quilómetro da Linha do Oeste</b><small>Ex.: 115+350 · outras linhas em «Rede nacional / PK»</small></div><input aria-label="PK a localizar" value={pkBusca} onChange={e=>setPkBusca(e.target.value)} onKeyDown={e=>e.key==='Enter'&&procurarPK()}/><button onClick={procurarPK}>Localizar PK</button></section>
@@ -320,7 +320,7 @@ function App(){
   {tab==='desloc'&&<main className="card records"><h2>Deslocações e cópia de dados</h2><div className="actions"><button onClick={exportarJSON}>Exportar JSON</button><label className="file-action">Importar cópia JSON<input ref={jsonRef} type="file" accept="application/json,.json" onChange={e=>importarBackup(e.target.files?.[0])}/></label></div>
    {desloc.length===0?<p>Sem deslocações registadas.</p>:<div className="table-scroll"><table><thead><tr><th>Data</th><th>Hora</th><th>Destino</th><th>PK</th><th>GPS</th></tr></thead><tbody>{desloc.map(d=><tr key={d.id}><td>{d.data}</td><td>{d.hora}</td><td>{d.destino}</td><td>{d.pk}</td><td>{d.gps}</td></tr>)}</tbody></table></div>}
    <p className="footnote">Exporta um JSON antes de desinstalar ou limpar os dados da app. As coordenadas de campo, PK corrigidos e acessos são guardados localmente no dispositivo.</p></main>}
-  <footer>RJP Navigator V3.9 · Rede Ferroviária Nacional · Linha do Oeste PK 21+191 a 191+191 · Cartografia IP integrada: coordenadas PK estimadas, validar no terreno · Não substitui os procedimentos de segurança ferroviária.</footer>
+  <footer>RJP Navigator V3.10 · Rede Ferroviária Nacional · Linha do Oeste PK 21+191 a 191+191 · Cartografia IP integrada: coordenadas PK estimadas, validar no terreno · Não substitui os procedimentos de segurança ferroviária.</footer>
  </div>;
 }
 

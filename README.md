@@ -1,4 +1,4 @@
-# RJP Navigator V3.9 — Navegação na Rede Ferroviária Nacional
+# RJP Navigator V3.10 — Navegação na Rede Ferroviária Nacional
 
 WebApp instalável e aplicação Android (Capacitor). Desenvolvida sobre a V3.7.1, conserva a navegação da Linha do Oeste e acrescenta pesquisa de PK e aproximação rodoviária no separador **Rede nacional / PK**.
 
@@ -38,7 +38,7 @@ WebApp instalável e aplicação Android (Capacitor). Desenvolvida sobre a V3.7.
 
 ### Sobre os dados de referência
 
-Fontes para os PK introduzidos na V3.9:
+Fontes para os PK introduzidos na V3.10:
 - [IP — Plano de Ação Linha do Norte I](https://www.infraestruturasdeportugal.pt/sites/default/files/ambiente-ruido/2020/norte_I.pdf)
 - [IP — Plano de Ação Linha do Minho I](https://www.infraestruturasdeportugal.pt/sites/default/files/ambiente-ruido/2020/minho_I.pdf)
 - [IP — Diretório da Rede 2019](https://www.infraestruturasdeportugal.pt/sites/default/files/inline-files/Diret%C3%B3rio%20da%20Rede%202019.pdf)
@@ -59,7 +59,7 @@ O `vite.config.js` já define a base de GitHub Pages na compilação de publica�
 
 ## Criar APK Android
 
-Em **Actions → Build RJP Navigator APK V3.9 → Run workflow**, espera pelo `android` verde e transfere o artefacto `RJP_Navigator_V3_9_APK`. O ID `pt.rjp.navigator` mantém-se; a instalação sobre a versão anterior depende também da assinatura Android. Exporta backups antes de substituir uma versão.
+Em **Actions → Build RJP Navigator APK V3.10 → Run workflow**, espera pelo `android` verde e transfere o artefacto `RJP_Navigator_V3_10_APK`. O ID `pt.rjp.navigator` mantém-se; a instalação sobre a versão anterior depende também da assinatura Android. Exporta backups antes de substituir uma versão.
 
 ## Testes do projeto
 
@@ -74,6 +74,6 @@ npm run build
 
 ## Limites reais
 
-- A V3.9 **não contém referências quilométricas validadas de todas as linhas**: seis troços têm referências documentais para uma **primeira estimativa**; nos restantes é necessário acrescentar pelo menos duas referências. Nunca apresenta um PK estimado como confirmado.
+- A V3.10 **não contém referências quilométricas validadas de todas as linhas**: seis troços têm referências documentais para uma **primeira estimativa**; nos restantes é necessário acrescentar pelo menos duas referências. Nunca apresenta um PK estimado como confirmado.
 - A base nacional de PN/EDF não está preenchida automaticamente para todas as linhas; os ativos da Linha do Oeste continuam na base existente, e podem ser acrescentados por linha nos restantes troços.
 - A proximidade de uma estrada ao eixo ferroviário não demonstra acessibilidade pública, legalidade de paragem, nem percurso pedonal seguro. Confirmar acesso antes de circular.

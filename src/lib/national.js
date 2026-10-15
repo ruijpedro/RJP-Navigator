@@ -115,3 +115,28 @@ export function locateGeometricDistance(distanceMeters,profile){
  if(!Number.isFinite(d)||d<0||d>profile.length)return {error:`Distância geométrica fora do eixo: 0–${Math.round(profile.length)} m.`};
  return {...pointAt(profile,d),status:'Km geométrico a partir do extremo A — NÃO É PK OFICIAL',displayPK:null};
 }
+
+
+/** Procura um PK nos troços calibrados de uma linha, preferindo o troço selecionado.
+ *  Não estima PK oficiais em troços sem referências quilométricas.
+ */
+export function resolveNationalLinePK(pkValue,lineName,segments,calibrations={},preferredIndex=0){
+ const pk=parsePK(pkValue);
+ if(pk===null||pk<0)return {error:'PK inválido. Usa, por exemplo, 115+350.'};
+ if(!Array.isArray(segments)||!segments.length)return {error:'Esta linha não tem geometria ferroviária utilizável.'};
+ const indices=[preferredIndex,...segments.map((_,i)=>i).filter(i=>i!==preferredIndex)];
+ let validCount=0,firstError='';
+ for(const i of indices){
+  const segment=segments[i];if(!segment?.coords?.length)continue;
+  let profile;try{profile=geometryProfile(segment.coords);}catch{continue;}
+  const calibration=calibrations[segmentKey(lineName,i)]??defaultCalibration(lineName,i);
+  const anchors=calibrationReferences(profile,calibration);
+  if(anchors.error){if(!firstError)firstError=anchors.error;continue;}
+  if(anchors.references.length<2)continue;
+  validCount++;
+  const location=locateNationalPK(pk,profile,calibration);
+  if(!location.error)return {segmentIndex:i,location,profile};
+ }
+ return {error:validCount?`PK ${formatPK(pk)} fora dos intervalos calibrados desta linha. Seleciona outro PK ou acrescenta referências verificadas.`:
+  firstError||'Esta linha ainda não tem duas referências PK/GPS confirmadas em nenhum troço. Seleciona um ponto no mapa ou usa a distância geométrica; não são PK oficiais.'};
+}
