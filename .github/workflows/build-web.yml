@@ -1,41 +1,74 @@
-name: Build RJP Navigator Web
+name: Build RJP Navigator WebApp V4.1.1
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
-  workflow_dispatch:
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.js'
+      - '.github/workflows/build-web.yml'
+  pull_request:
+    branches: [ main ]
 
 permissions:
   contents: read
 
 jobs:
-  build-web:
+  build-webapp:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - name: Obter o código
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Preparar Node.js 22
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '22'
 
-      - name: Clean previous install
+      # Evita reutilizar package-lock.json antigo contendo URLs de registry privado.
+      - name: Limpar dependências antigas
+        shell: bash
         run: |
+          set -euo pipefail
+          node --version
+          npm --version
           rm -rf node_modules package-lock.json
-          npm cache clean --force
+          npm config set registry https://registry.npmjs.org/
 
-      - name: Install dependencies
-        run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps
+      - name: Instalar dependências
+        run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps --package-lock=false --fetch-retries=4
 
-      - name: Verify Vite
+      - name: Repor dados e funções V4.0 (103 PN e cartografia IP)
+        run: npm run repair:data
+
+      - name: Executar testes
+        run: npm test
+
+      - name: Preparar cartografia de arranque
+        run: npm run prepare:maps
+
+      - name: Compilar WebApp
+        run: npm run build
+
+      - name: Verificar saída
+        shell: bash
         run: |
-          node -e "console.log(require('./node_modules/vite/package.json').version)"
-          ./node_modules/.bin/vite --version
+          test -s dist/index.html
+          echo 'WebApp V4.1.1 compilada:'
+          ls -lah dist/
 
-      - name: Build WebApp
-        run: ./node_modules/.bin/vite build
-
-      - uses: actions/upload-artifact@v4
+      - name: Disponibilizar WebApp para descarregar
+        uses: actions/upload-artifact@v4
         with:
-          name: RJP_Navigator_Web
-          path: dist
+          name: RJP_Navigator_V4_1_WebApp
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30

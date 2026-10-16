@@ -1,4 +1,4 @@
-name: Publicar RJP Navigator WebApp
+name: Publicar RJP Navigator WebApp V4.1.1
 
 on:
   push:
@@ -17,7 +17,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -34,8 +34,9 @@ jobs:
           npm config set registry https://registry.npmjs.org/
       - name: Instalar dependências
         run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps --package-lock=false --fetch-retries=4
-      - name: Testar PK e validar mapas IP locais
+      - name: Recuperar dados e funções e executar testes
         run: |
+          npm run repair:data
           npm test
           RJP_REQUIRE_MAPS=1 npm run prepare:maps
       - name: Compilar WebApp para GitHub Pages
