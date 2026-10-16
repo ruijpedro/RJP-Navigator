@@ -116,7 +116,7 @@ function App(){
  // As referências quilométricas são um segundo conjunto de dados, não vêm automaticamente no eixo.
  useEffect(()=>{let active=true;const controller=new AbortController();
   loadPKReferences(`${import.meta.env.BASE_URL}data/referencias-pk-rfn.json`,{signal:controller.signal})
-   .then(data=>{if(active){setNationalPKRefs(data);setNationalPKStatus(data.assigned>0?`${data.assigned} marcos OSM atribuídos a ${Object.keys(data.lines).length} troços; por validar`:'Sem marcos nacionais incorporados nesta compilação; usar consulta OSM por linha');}})
+   .then(data=>{if(active){setNationalPKRefs(data);setNationalPKStatus(data.assigned>0?`${data.assigned} marcos OSM atribuídos a ${Object.keys(data.lines).length} troços; por validar`:'Nenhum marco PK OSM nacional foi recolhido; continuam disponíveis as referências documentais de alguns troços. Aproxima o mapa para ver os PK disponíveis.');}})
    .catch(e=>{if(active)setNationalPKStatus(`Referências PK não disponíveis: ${e.message}. A cartografia ferroviária continua utilizável.`);});
   return()=>{active=false;controller.abort();};
  },[]);
@@ -359,7 +359,7 @@ function App(){
 
  const selectedOnMap=consulta!==null&&consultPoint?{...consultPoint,key:`pk-consulta-${consulta}`,titulo:`PK ${formatPK(consulta)}`}:selKey&&isPositioned(current)?current:null;
  return <div className="app">
-  <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V4.2.3</span></h1><p>Rede Ferroviária Nacional · Linha do Oeste em destaque</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
+  <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V4.2.4</span></h1><p>Rede Ferroviária Nacional · Linha do Oeste em destaque</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
   <nav>{[['inicio','Início'],['nacional','Rede Nacional'],['locais','Locais'],['pn','Passagens de nível'],['km','PK/Km'],['mapa','Linha do Oeste'],['novo','Novo local'],['desloc','Deslocações']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>changeTab(k)}>{t}</button>)}</nav>
   {notice&&<div className="notice" role="status">{notice}<button title="Fechar" onClick={()=>setNotice('')}>×</button></div>}
   <section className="card rjp-gps-nearest" aria-label="Localização ferroviária automática por GPS">

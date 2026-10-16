@@ -3,26 +3,16 @@
  * Erros de rede preservam o último ficheiro válido. */
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {associatePKToNetwork,validatePKReferences,emptyPKReferences} from '../src/lib/pk-references.js';
+import {requestOverpassPK} from '../src/lib/overpass-client.js';
 const nationalUrl=new URL('../public/data/rede-ferroviaria-nacional.json',import.meta.url);
 const fileUrl=new URL('../public/data/referencias-pk-rfn.json',import.meta.url);
 const net=JSON.parse(await readFile(nationalUrl,'utf8'));
 const bounds=[[36.75,-9.65,38.75,-6.05],[38.75,-9.65,40.5,-6.05],[40.5,-9.65,42.25,-6.05]];
-const hosts=['https://overpass.kumi.systems/api/interpreter','https://overpass-api.de/api/interpreter'];
 async function fetchArea(bb){
- const b=bb.join(',');
- const query=`[out:json][timeout:90];(node["railway"="milestone"](${b});node["railway:position"](${b});node["railway:position:exact"](${b}););out body;`;
- let last='';
- for(const host of hosts){
-  const ctl=new AbortController();const timeout=setTimeout(()=>ctl.abort(),70000);
-  try{
-   const res=await fetch(host+'?data='+encodeURIComponent(query),{signal:ctl.signal,headers:{Accept:'application/json'}});
-   if(!res.ok)throw Error(`HTTP ${res.status}`);
-   const data=await res.json();
-   if(!Array.isArray(data.elements))throw Error('Sem elementos OSM');
-   return data.elements;
-  }catch(e){last=String(e.message||e);}finally{clearTimeout(timeout);}
- }
- throw Error(last||'Serviço de cartografia indisponível');
+ const bbox=bb.join(',');
+ const query=`[out:json][timeout:90];(node["railway"="milestone"](${bbox});node["railway:position"](${bbox});node["railway:position:exact"](${bbox}););out body;`;
+ const result=await requestOverpassPK(query);
+ return result.elements;
 }
 let saved;try{saved=validatePKReferences(JSON.parse(await readFile(fileUrl,'utf8')));}catch{saved=emptyPKReferences();}
 const all=[];let errors=0;
@@ -38,3 +28,4 @@ if(errors===0){
 await mkdir(new URL('../public/data/',import.meta.url),{recursive:true});
 await writeFile(fileUrl,JSON.stringify(saved));
 console.log(`Base PK incluída: ${saved.assigned||0} marcos, ${Object.keys(saved.lines).length} troços; estado=${saved.status}.`);
+if(!saved.assigned)console.warn('AVISO IMPORTANTE: não foram recebidos marcos PK nacionais. Os PK documentais continuarão como estimativas; não apresentar cobertura completa.');

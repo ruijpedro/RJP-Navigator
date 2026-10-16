@@ -47,3 +47,7 @@
 .rjp-gps-place-heading strong{font-size:1.2rem;line-height:1.25;overflow-wrap:anywhere}
 .rjp-gps-place-kicker{text-transform:uppercase;letter-spacing:.04em;font-size:.78rem;color:#56756b;font-weight:700}
 .rjp-gps-nearest .rjp-gps-admin{font-size:.93rem;color:#49675a;margin:4px 0 12px;line-height:1.45}
+
+/* V4.2.4 — etiquetas quilométricas geográficas por troço calibrado */
+.rjp-national-km-label{font-size:10px!important;font-weight:700!important;border-radius:5px!important;border:1px solid #d3c3e9!important;box-shadow:0 1px 3px #0002!important;padding:2px 4px!important;pointer-events:none!important}
+.national-km-toggle{border:1px solid #c5b1e6;border-radius:9px;padding:10px;background:#f8f3ff;font-weight:700}

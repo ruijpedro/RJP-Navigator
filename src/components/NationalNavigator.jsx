@@ -12,6 +12,7 @@ import {
 } from '../lib/national.js';
 import {NATIONAL_PRESETS} from '../lib/national-presets-v42.js';
 import {milestoneQueryForRoute,parseMilestoneOSM,assessMilestones,improveCalibrationWithMilestones,generateHectometers,calibrationDiagnostics} from '../lib/hectometers.js';
+import {buildNationalKilometerLayer,visibleNationalMarkers} from '../lib/network-km-layer.js';
 
 const CACHE='rjp_nav_nacional_v4';
 const load=()=>{
@@ -29,8 +30,8 @@ const safeFeatureCount=100000;
 const EMPTY_ARRAY=Object.freeze([]);
 const EMPTY_OBJECT=Object.freeze({});
 
-function NationalMap({route,segments,network,calibration,selectedPoint,onPick,showRail=true,showHectometers=false,hectometers=[],milestones=[]}){
- const mapElement=useRef(),mapRef=useRef(),networkGroup=useRef(),lineGroup=useRef(),hectoGroup=useRef(),markerGroup=useRef();
+function NationalMap({route,segments,network,calibration,selectedPoint,onPick,showRail=true,showHectometers=false,hectometers=[],milestones=[],nationalKm=[],showNationalKm=true}){
+ const mapElement=useRef(),mapRef=useRef(),networkGroup=useRef(),lineGroup=useRef(),hectoGroup=useRef(),markerGroup=useRef(),nationalKmGroup=useRef();
  const [viewport,setViewport]=useState({zoom:7,bounds:null});
  useEffect(()=>{
   if(!mapElement.current)return;
@@ -38,10 +39,10 @@ function NationalMap({route,segments,network,calibration,selectedPoint,onPick,sh
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
   L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png',{maxZoom:19,opacity:.86,attribution:'© OpenRailwayMap / OpenStreetMap'}).addTo(map);
   L.control.scale({imperial:false}).addTo(map);
-  networkGroup.current=L.layerGroup().addTo(map);lineGroup.current=L.layerGroup().addTo(map);hectoGroup.current=L.layerGroup().addTo(map);markerGroup.current=L.layerGroup().addTo(map);mapRef.current=map;
+  networkGroup.current=L.layerGroup().addTo(map);lineGroup.current=L.layerGroup().addTo(map);hectoGroup.current=L.layerGroup().addTo(map);markerGroup.current=L.layerGroup().addTo(map);nationalKmGroup.current=L.layerGroup().addTo(map);mapRef.current=map;
   const refresh=()=>setViewport({zoom:map.getZoom(),bounds:map.getBounds()});map.on('moveend zoomend',refresh);refresh();
   setTimeout(()=>map.invalidateSize(),150);
-  return()=>{map.remove();mapRef.current=null;networkGroup.current=null;lineGroup.current=null;hectoGroup.current=null;markerGroup.current=null;};
+  return()=>{map.remove();mapRef.current=null;networkGroup.current=null;lineGroup.current=null;hectoGroup.current=null;markerGroup.current=null;nationalKmGroup.current=null;};
  },[]);
  // Camada nacional verdadeira, pré-integrada durante a compilação. Visível sem importar linhas.
  useEffect(()=>{if(!networkGroup.current)return;networkGroup.current.clearLayers();
@@ -67,6 +68,24 @@ function NationalMap({route,segments,network,calibration,selectedPoint,onPick,sh
   if(all.length){map.fitBounds(L.latLngBounds(all).pad(.10),{maxZoom:12});}
   else{map.setView(defaultCenter,7);}
  },[route,segments,calibration,onPick,showRail]);
+ // PK nacionais (quilómetros inteiros) aparecem em todas as linhas calibráveis.
+ // Nos níveis regionais, reduzir a densidade para não tapar a cartografia.
+ useEffect(()=>{
+  const group=nationalKmGroup.current;if(!group)return;group.clearLayers();
+  if(!showNationalKm)return;
+  const zoom=viewport.zoom,bounds=viewport.bounds;
+  const div=zoom<=7?20000:zoom===8?10000:zoom===9?5000:zoom===10?2000:1000;
+  const raw=(nationalKm||[]).filter(m=>m.pk%div===0);
+  const viewportBox=bounds?{south:bounds.getSouth(),north:bounds.getNorth(),west:bounds.getWest(),east:bounds.getEast()}:null;
+  const markers=visibleNationalMarkers(raw,viewportBox,zoom,{maxVisible:zoom<=8?75:zoom<=10?170:350});
+  for(const m of markers){
+   const label=`${m.line} · PK ${m.label} — ${m.status}`;
+   const shape=L.circleMarker([m.lat,m.lng],{radius:zoom>=12?5:4,color:m.verified?'#13764b':'#7742a8',weight:2,fillColor:m.verified?'#abf0ce':'#f0dcff',fillOpacity:0.95});
+   shape.bindTooltip(`PK ${m.label}`,{permanent:zoom>=10,direction:'top',className:'rjp-national-km-label',opacity:.93});
+   shape.bindPopup(`<strong>${m.line}</strong><div>PK ${m.label}</div><small>${m.status}</small>`);
+   shape.addTo(group);
+  }
+ },[nationalKm,showNationalKm,viewport]);
  useEffect(()=>{
   const map=mapRef.current,virtual=hectoGroup.current,real=markerGroup.current;
   if(!map||!virtual||!real)return;
@@ -102,12 +121,13 @@ function NationalMap({route,segments,network,calibration,selectedPoint,onPick,sh
 export default function NationalNavigator({oesteRoute=null,obterGPS,network=null,networkLoading=false,networkError='',pkReferences=null,pkStatus='',focusLine='',gpsNear=null,initialLine='oeste'}){
  const [store,setStore]=useState(load),[lineId,setLineId]=useState(initialLine),[customName,setCustomName]=useState('');
  const [segmentIndex,setSegmentIndex]=useState(0);
- const [busy,setBusy]=useState(false),[milestoneBusy,setMilestoneBusy]=useState(false),[showHectometers,setShowHectometers]=useState(true),[notice,setNotice]=useState(''),[searchPK,setSearchPK]=useState('115+350');
+ const [busy,setBusy]=useState(false),[milestoneBusy,setMilestoneBusy]=useState(false),[showHectometers,setShowHectometers]=useState(true),[showNationalKm,setShowNationalKm]=useState(true),[notice,setNotice]=useState(''),[searchPK,setSearchPK]=useState('115+350');
  const [selectedPoint,setSelectedPoint]=useState(null),[admin,setAdmin]=useState(null),[adminError,setAdminError]=useState(''),[road,setRoad]=useState(null),[roadBusy,setRoadBusy]=useState(false),[roadError,setRoadError]=useState('');
  const [anchorForm,setAnchorForm]=useState({pk:'',lat:'',lng:'',verified:false,note:''});
  const geoInput=useRef(),csvInput=useRef(),backupInput=useRef();
  const anchors=store.anchors||EMPTY_OBJECT,routes=store.routes||EMPTY_OBJECT,segmentsByLine=store.segments||EMPTY_OBJECT,names=store.names||EMPTY_OBJECT,milestonesByLine=store.milestones||EMPTY_OBJECT;
  const idForNetwork=(name)=>idForLine(name)||String(name).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+ const nationalKmLayer=useMemo(()=>buildNationalKilometerLayer(network,{referenceSets:pkReferences?.lines||{},presets:NATIONAL_PRESETS}),[network,pkReferences]);
  const fromNetwork=(network?.linhas||[]).map(x=>({id:idForNetwork(x.nome),nome:x.nome}));
  const opts=[...fromNetwork,...RAIL_LINES,...Object.entries(names).map(([id,nome])=>({id,nome}))].filter((x,i,all)=>all.findIndex(v=>v.id===x.id)===i);
  const line=opts.find(x=>x.id===lineId)||opts[0]||RAIL_LINES[0];
@@ -222,7 +242,7 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,network=null
  async function findRoad(withGps=false){if(!validGPS(selectedPoint?.lat,selectedPoint?.lng))return;setRoadBusy(true);setRoadError('');setRoad(null);
   try{const origin=withGps&&obterGPS?await obterGPS():null;const result=await findRoadAccess(selectedPoint,origin);setRoad(result.recommended);}catch(e){setRoadError(e.message);}finally{setRoadBusy(false);}
  }
- const exportJSON=()=>downloadText(JSON.stringify({version:'4.2.1',exportedAt:new Date().toISOString(),...store},null,2),'RJP_Navigator_RFN_Calibracao_Backup.json','application/json');
+ const exportJSON=()=>downloadText(JSON.stringify({version:'4.2.4',exportedAt:new Date().toISOString(),...store},null,2),'RJP_Navigator_RFN_Calibracao_Backup.json','application/json');
  const exportCSV=()=>{const items=Object.entries(anchors).flatMap(([id,refs])=>refs.map(a=>[names[id]||RAIL_LINES.find(x=>x.id===id)?.nome||id,formatPK(a.pk),a.lat,a.lng,a.verified?'Sim':'Não',a.source]));
   const csv='\uFEFF'+[['linha','pk','latitude','longitude','validado','fonte'],...items].map(row=>row.map(v=>'"'+String(v||'').replaceAll('"','""')+'"').join(';')).join('\r\n');downloadText(csv,'RJP_Navigator_RFN_Referencias.csv','text/csv;charset=utf-8');};
  const importBackup=async f=>{if(!f)return;try{const data=JSON.parse(await f.text());if(!data||typeof data!=='object'||!data.anchors||!data.routes)throw Error('Formato inválido');
@@ -232,8 +252,8 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,network=null
  const routeStatus=calibration.ready?`Calibração estimada entre ${formatPK(calibration.span[0])} e ${formatPK(calibration.span[1])} — ${calibration.anchors.length} referências${calibration.verified?' verificadas':' (algumas por validar)'}`:calibration.reason;
  const linesWithAnchors=new Set([...Object.entries(anchors).filter(([,a])=>a.length>=2).map(([k])=>k),...Object.entries(pkReferences?.lines||{}).filter(([,a])=>a.length>=2).map(([key])=>key.split('|')[0])]).size;
  return <main className="national-view">
-  <section className="card national-lead"><div><h2>Rede Ferroviária Nacional · V4.2.1</h2><p>Geometria de toda a rede incorporada na WebApp/APK e motor de calibração por linha. A Linha do Oeste mantém a sua área de responsabilidade no separador original.</p></div>
-   <div className="national-stats"><span><b>{opts.length}</b> linhas no catálogo</span><span><b>{linesWithAnchors}</b> com ≥2 referências</span><span><b>{(network?.linhas||[]).reduce((n,l)=>n+(l.segmentos?.filter(s=>s.coords?.length>1).length||0),0)}</b> segmentos nacionais disponíveis</span></div>
+  <section className="card national-lead"><div><h2>Rede Ferroviária Nacional · V4.2.4</h2><p>Geometria de toda a rede incorporada na WebApp/APK e motor de calibração por linha. A Linha do Oeste mantém a sua área de responsabilidade no separador original.</p></div>
+   <div className="national-stats"><span><b>{opts.length}</b> linhas no catálogo</span><span><b>{nationalKmLayer.calibrated}/{nationalKmLayer.segments}</b> troços com PK indicativos</span><span><b>{linesWithAnchors}</b> com ≥2 referências</span><span><b>{(network?.linhas||[]).reduce((n,l)=>n+(l.segmentos?.filter(s=>s.coords?.length>1).length||0),0)}</b> segmentos nacionais disponíveis</span></div>
   </section>
   <p className="footnote national-pk-load"><strong>Referências quilométricas nacionais:</strong> {pkStatus||"A verificar…"}. Apenas referências compatíveis com o troço são utilizadas; os marcos OSM não são certificados.</p>
   <section className="national-layout">
@@ -248,7 +268,9 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,network=null
     <p className="footnote">O eixo nacional vem do pacote compilado, sem importação manual. As imagens de ruas (OpenStreetMap) e a atualização de estradas continuam a precisar de internet.</p>
     <button type="button" disabled={busy} onClick={fetchLineOSM}>{busy?'A consultar OSM...':'Procurar eixo OSM desta linha'}</button>
     <button type="button" disabled={milestoneBusy||!currentRoute} onClick={()=>fetchMilestones(false)}>{milestoneBusy?'A procurar marcos...':'Procurar marcos PK no OpenStreetMap'}</button>
-    <label className="national-check hecto-toggle"><input type="checkbox" checked={showHectometers} onChange={e=>setShowHectometers(e.target.checked)}/> Mostrar hectométricos (100 m) e marcos OSM</label>
+    <label className="national-check national-km-toggle"><input type="checkbox" checked={showNationalKm} onChange={e=>setShowNationalKm(e.target.checked)}/> Mostrar quilómetros (PK) de toda a Rede Nacional</label>
+    <p className="footnote">PK nacionais desenhados: {nationalKmLayer.markers.length} pontos de quilómetro inteiro em {nationalKmLayer.calibrated} troços; {nationalKmLayer.withoutPK} troços sem referências adequadas. Aproxima o mapa para veres mais rótulos. <strong>Valores estimados, não certificados</strong> salvo validação explícita.</p>
+    <label className="national-check hecto-toggle"><input type="checkbox" checked={showHectometers} onChange={e=>setShowHectometers(e.target.checked)}/> Mostrar hectométricos (100 m) e marcos OSM da linha selecionada</label>
     <p className="footnote">Hectómetros estimados: {hectometers.length} · Marcos OSM na linha/troço: {combinedMilestones.length} (incorporados: {bundledMilestones.length}) · Aceites como referências adicionais: {enhanced.accepted.length}. Os marcadores são desenhados ao aproximar o mapa (zoom 11+).</p>
     {calibration.ready&&<p className="footnote">Calibração: {diagnostics.quality}; {diagnostics.warnings} intervalos com alertas; maior distância entre âncoras: {Math.round(diagnostics.worstGapMeters||0)} m. Nenhum marco OSM é certificado automaticamente.</p>}
     <label className="file-action national-file">Importar eixo GeoJSON WGS84<input ref={geoInput} type="file" accept=".geojson,.json" onChange={e=>importRoute(e.target.files?.[0])}/></label>
@@ -260,7 +282,7 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,network=null
    </div>
    <section className="card national-map-card"><h3>Mapa ferroviário de Portugal</h3>
     {gpsNear&&<div className="national-message"><strong>GPS: {gpsNear.line}</strong> · {gpsNear.pkLabel?'PK '+gpsNear.pkLabel+' (estimado)':'PK sem calibração'} · {gpsNear.offsetMeters} m até ao eixo. {gpsNear.calibrationStatus}</div>}
-    <NationalMap route={calibration.route||currentRoute} segments={currentSegments} network={network} calibration={calibration} selectedPoint={selectedPoint} onPick={pick} showHectometers={showHectometers} hectometers={hectometers} milestones={evaluatedMilestones}/>
+    <NationalMap route={calibration.route||currentRoute} segments={currentSegments} network={network} calibration={calibration} selectedPoint={selectedPoint} onPick={pick} showHectometers={showHectometers} hectometers={hectometers} milestones={evaluatedMilestones} nationalKm={nationalKmLayer.markers} showNationalKm={showNationalKm}/>
     <p className="footnote">Toca no eixo realçado para obter coordenadas. Camada opcional: roxo = hectómetros virtuais de 100 m (visíveis com zoom ≥ 11); azul = marcos OSM coerentes por validar; laranja = marcos OSM discordantes. A posição não substitui a referenciação oficial.</p>
     {notice&&<div className="national-message">{notice}<button onClick={()=>setNotice('')} aria-label="Fechar aviso">×</button></div>}
     {selectedPoint&&<div className="national-result"><h3>{selectedPoint.pk!=null?`PK ${formatPK(selectedPoint.pk)}`:'Ponto ferroviário (PK ainda não calibrado)'}</h3>

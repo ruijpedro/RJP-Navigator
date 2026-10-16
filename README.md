@@ -151,3 +151,35 @@ sistema operativo. A linha ferroviária mais próxima, PK estimado e distância
 usa geocodificação inversa OpenStreetMap/Nominatim (necessita de internet) e
 cache local por zona até 24 horas; se o serviço não responder, as coordenadas
 GPS continuam visíveis sem atribuir nomes geográficos fictícios.
+
+
+## V4.2.4 — Quilómetros da rede nacional no mapa
+
+A V4.2.3 carregava as geometrias nacionais mas a consulta de marcos PK falhou nas
+três zonas com HTTP 406 (observado no GitHub Actions de 16/10/2026), criando um
+`referencias-pk-rfn.json` vazio. A V4.2.4 altera a recolha para POST
+`application/x-www-form-urlencoded`, tentando vários espelhos do Overpass. Se
+nenhum servidor responder, **não fabrica referências**: o estado continua visível.
+
+No separador **Rede Nacional** há um controlo independente **Mostrar quilómetros
+(PK) de toda a Rede Nacional**. A camada desenha rótulos de PK de todas as linhas
+que tenham pelo menos duas âncoras compatíveis para o mesmo troço. Nos níveis
+mais afastados mostra apenas quilómetros espaçados (20 km / 10 km / 5 km / 2 km)
+e ao aproximar mostra cada quilómetro; os hectómetros de 100 em 100 metros
+continuam opcionais para a linha selecionada. A camada indica quantos troços
+ficaram sem PK por insuficiência de referências.
+
+**Calibração**: linhas com referências geográficas oficialmente verificadas
+podem distinguir essas referências. Presets documentais e marcos OSM são por
+validar. O utilizador nunca deve tratar uma interpolação entre extremos da
+linha como posicionamento quilométrico oficial para segurança em via. Onde a
+cartografia não contém referências, os traçados aparecem mas não recebem PK
+fictícios. A cobertura exata dependerá da resposta do Overpass e dos dados
+georreferenciados disponíveis para cada linha.
+
+Durante a compilação, `npm run repair:data` recupera o inventário histórico
+de 103 PN, a cartografia IP da Linha do Oeste e a cartografia RFN. Este processo
+exige internet e acesso ao commit público histórico. Depois são executados
+`npm test`, `npm run prepare:pk`, `npm run verify:pk`, `npm run prepare:maps` e
+`npm run build`. WebApp e APK têm workflows independentes. A cache da WebApp
+foi atualizada para evitar reutilizar ficheiros antigos.

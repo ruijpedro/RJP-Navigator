@@ -1,0 +1,28 @@
+RJP Navigator V4.2.4 — PK / Quilómetros da Rede Ferroviária Nacional
+
+CORREÇÕES
+1. O GitHub Actions da V4.2.3 recebeu HTTP 406 nas 3 consultas de marcos OSM
+   e compilou com 0 referências PK nacionais (não confundir com geometria RFN).
+2. Recolha de PK alterada para POST Overpass, com três serviços alternativos.
+3. Nova camada de marcadores PK (quilómetros inteiros) de todas as linhas com
+   pelo menos duas referências compatíveis por segmento; visível por interruptor.
+4. Intervalo entre marcadores acompanha o zoom (20 km/10 km/5 km/2 km/1 km).
+5. Hectométricos de 100 em 100 m continuam disponíveis para linha selecionada.
+6. Interface mostra o número de troços com e sem PK estimável.
+7. Cache da WebApp passa à V4.2.4; evita persistência de mapa PK antigo.
+8. Corrigidos nomes dos workflows WebApp / Android para V4.2.4.
+
+LIMITAÇÕES
+- O Shapefile da rede cartografa eixos, mas não é uma calibração oficial completa.
+- Um PK só é interpolado dentro de intervalos com duas referências coerentes.
+- Os marcos OSM e as âncoras documentais não são tratados como levantamento
+  topográfico certificado; troços sem PK continuam sem PK apresentado.
+- Se os serviços Overpass não responderem na compilação, as referências
+  documentais de alguns troços continuam úteis, mas não existe cobertura total.
+- Os ficheiros nacionais de cartografia e inventário de 103 PN são restaurados
+  automaticamente no GitHub Actions por scripts/restore-v40-compat.mjs.
+
+VALIDAÇÃO DESTE PACOTE
+- 83 testes locais passaram (node --test tests/*.test.mjs).
+- JSX analisado sem erros de sintaxe.
+- Compilação GitHub Actions APK/WebApp ainda não validada nesta versão.

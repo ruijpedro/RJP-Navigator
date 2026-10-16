@@ -1,7 +1,7 @@
 {
   "name": "RJP Navigator",
   "short_name": "RJP Nav",
-  "description": "Mapa automático da Linha do Oeste: PK, PN, estações e edifícios, navegação técnica ferroviária",
+  "description": "Cartografia da Rede Ferroviária Nacional, PK e hectómetros calibrados ou estimados, navegação ferroviária técnica",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",

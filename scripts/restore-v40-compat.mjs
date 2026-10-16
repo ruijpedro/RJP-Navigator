@@ -98,6 +98,10 @@ const inventoryPanel=`  {tab==='ativos'&&<main className="card"><h2>Ativos ferro
 must("  {tab==='nacional'&&<NationalNavigator",inventoryPanel+"\n  {tab==='nacional'&&<NationalNavigator",'inventário nacional');
 main='// '+note+' — preserva GPS/PK/PN/EDF e hectómetros.\n'+main;
 // Substituir os ficheiros só depois de validar as entradas históricas.
+// Cache isolada para a V4.2.4: evita reter dados PK vazios de versões anteriores.
+historical['public/sw.js']=historical['public/sw.js']
+ .replace(/rjp-navigator-webapp-v4-0-0/g,'rjp-navigator-webapp-v4-2-4')
+ .replace("'data/linha-oeste-preload.json', 'data/rede-ferroviaria-nacional.json'", "'data/linha-oeste-preload.json', 'data/rede-ferroviaria-nacional.json', 'data/referencias-pk-rfn.json'");
 for(const p of oldFiles)await put(p,historical[p]);
 if(missing)await put(requiredLarge,historical[requiredLarge]);
 const nationalData=JSON.parse(await read(requiredLarge));
