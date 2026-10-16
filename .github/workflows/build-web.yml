@@ -1,4 +1,4 @@
-name: Build RJP Navigator WebApp V4.2
+name: Build RJP Navigator WebApp V4.2.3
 
 on:
   workflow_dispatch:
@@ -55,6 +55,11 @@ jobs:
       - name: Executar testes
         run: npm test
 
+      - name: Recolher e validar os marcos PK nacionais (OSM)
+        run: |
+          npm run prepare:pk
+          npm run verify:pk
+
       - name: Preparar cartografia de arranque
         run: npm run prepare:maps
 
@@ -65,14 +70,14 @@ jobs:
         shell: bash
         run: |
           test -s dist/index.html
-          test -s dist/data/rede-ferroviaria-nacional.json
-          echo 'WebApp V4.2 compilada:'
+          test -s dist/data/rede-ferroviaria-nacional.json && test -s dist/data/referencias-pk-rfn.json
+          echo 'WebApp V4.2.3 compilada:'
           ls -lah dist/
 
       - name: Disponibilizar WebApp para descarregar
         uses: actions/upload-artifact@v4
         with:
-          name: RJP_Navigator_V4_2_WebApp
+          name: RJP_Navigator_V4_2_3_WebApp
           path: dist/
           if-no-files-found: error
           retention-days: 30

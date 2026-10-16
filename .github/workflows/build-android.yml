@@ -1,4 +1,4 @@
-name: Build RJP Navigator APK V4.2
+name: Build RJP Navigator APK V4.2.3
 
 on:
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
           npm config set registry https://registry.npmjs.org/
           npm config get registry
 
-      - name: Instalar dependências da V4.2
+      - name: Instalar dependências da V4.2.3
         run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps --package-lock=false --fetch-retries=4
 
       - name: Repor dados e funções V4.0 (103 PN e cartografia IP)
@@ -49,6 +49,11 @@ jobs:
       - name: Executar testes
         run: npm test
 
+      - name: Recolher e validar os marcos PK nacionais (OSM)
+        run: |
+          npm run prepare:pk
+          npm run verify:pk
+
       - name: Incluir mapa da Linha do Oeste na aplicação
         run: npm run prepare:maps
 
@@ -56,7 +61,7 @@ jobs:
         run: npm run build
 
       - name: Verificar cartografia incorporada na WebApp
-        run: test -s dist/data/rede-ferroviaria-nacional.json && test -s dist/data/linha-oeste-preload.json
+        run: test -s dist/data/rede-ferroviaria-nacional.json && test -s dist/data/referencias-pk-rfn.json && test -s dist/data/linha-oeste-preload.json
 
       - name: Preparar Java
         uses: actions/setup-java@v4
@@ -109,6 +114,6 @@ jobs:
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: RJP_Navigator_V4_2_APK
+          name: RJP_Navigator_V4_2_3_APK
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error

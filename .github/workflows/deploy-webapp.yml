@@ -1,4 +1,4 @@
-name: Publicar RJP Navigator WebApp V4.2
+name: Publicar RJP Navigator WebApp V4.2.1
 
 on:
   push:
@@ -39,6 +39,8 @@ jobs:
           npm run repair:data
           npm run verify:network
           npm test
+          npm run prepare:pk
+          npm run verify:pk
           RJP_REQUIRE_MAPS=1 npm run prepare:maps
       - name: Compilar WebApp para GitHub Pages
         env:
@@ -49,6 +51,7 @@ jobs:
           test -s dist/index.html
           test -s dist/data/linha-oeste-preload.json
           test -s dist/data/rede-ferroviaria-nacional.json
+          test -s dist/data/referencias-pk-rfn.json
           test -s dist/sw.js
           test -s dist/config/pn-sync.json
       - name: Configurar Pages
