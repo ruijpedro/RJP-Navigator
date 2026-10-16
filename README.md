@@ -1,3 +1,49 @@
+# RJP Navigator V4.2 — Rede Nacional + PK pelo GPS
+
+**Novidade:** a V4.2 carrega automaticamente o cadastro geométrico nacional compilado (`public/data/rede-ferroviaria-nacional.json`). Assim que o GPS autorizado apresentar coordenadas, procura o eixo ferroviário mais próximo, a distância perpendicular à via e, somente quando existem duas referências de PK coerentes no troço, mostra o **PK estimado**. Alternativas próximas e elevada distância ao eixo são sinalizadas; não se inventa PK sem calibração. A rede nacional pode ser vista na WebApp/APK sem importar linha por linha.
+
+**Importante sobre o conteúdo do ZIP:** para evitar distribuir um cadastro incompleto, o ficheiro nacional (aproximadamente 1,6 MB), o traçado IP offline do Oeste e as 103 PN são recuperados automaticamente, **durante os workflows GitHub Actions**, de um commit imutável do mesmo repositório (`8d895423409a7ef003498e31e53344429ab01c9d`). O comando `npm run repair:data` faz essa operação. A compilação para em caso de falha, em vez de publicar um mapa vazio. A base nacional integra os ficheiros finais `dist/data/` e a APK gerada. O ZIP em si não contém ainda o ficheiro nacional recuperado. É necessária internet durante a compilação para descarregar os ficheiros e dependências.
+
+**Workflows incluídos:** `.github/workflows/build-android.yml` (APK), `.github/workflows/build-web.yml` (WebApp descarregável) e `.github/workflows/deploy-webapp.yml` (GitHub Pages). Depois de substituir os ficheiros completos no GitHub, usar Actions → **Build RJP Navigator APK V4.2** ou **Build RJP Navigator WebApp V4.2**. Para instalar sobre uma APK anterior é necessária a mesma assinatura Android; fazer backup dos dados locais antes de substituir/desinstalar.
+
+**Testes neste pacote:** 58 testes JavaScript passaram localmente com `node --test tests/*.test.mjs` e o JSX foi analisado sem erros de sintaxe. Não foi possível compilar a APK/WebApp localmente neste ambiente por falta de ligação ao npm/GitHub. O workflow restaura ainda os testes de regressão e os dados da V4.0; os resultados finais desses testes e da compilação terão de ser confirmados no GitHub Actions.
+
+**Limites de precisão:** o GPS do telemóvel pode ter desvios; a linha mais próxima geograficamente não é necessariamente a linha pretendida numa bifurcação. As posições PK são interpoladas a partir de referências cartográficas/documentais por validar, não correspondem a um cadastro quilométrico oficial certificado. A identificação e as sugestões de acesso rodoviário não autorizam a entrada na via.
+
+---
+
+# RJP Navigator V4.2 — Rede Nacional integrada + GPS automático
+
+## Correção fundamental da V4.1.1
+
+**Causa:** a V4.1.1 incluía a recuperação do ficheiro `public/data/rede-ferroviaria-nacional.json` na compilação, mas o componente `src/components/NationalNavigator.jsx` carregava apenas rotas adicionadas à memória local do dispositivo e não utilizava esse ficheiro. Isto deixava a Rede Nacional aparentemente vazia e impossibilitava identificar a linha mais próxima do GPS.
+
+**V4.2:** a aplicação lê automaticamente a geometria completa das linhas a partir do ficheiro nacional empacotado, desenha os segmentos no mapa, permite selecionar linha e troço, e conserva os hectométricos opcionais. O separador Rede Nacional deixa de depender de importar geometrias ou consultar OSM para cada linha.
+
+- O **GPS autorizado** é acompanhado enquanto a aplicação está aberta. Se já concedeste acesso à localização, identifica automaticamente a linha ferroviária geograficamente mais próxima; se ainda não deste permissão, carrega em **Ativar GPS**.
+- Mostra **linha, afastamento do eixo, precisão GPS, PK estimado quando calibrável** e linhas alternativas próximas. Não assume que a linha mais próxima é necessariamente a linha em que te encontras.
+- Nunca inventa PK se faltarem referências válidas. PK calculados são estimativas, não pontos topográficos oficiais. Acima de 2 km da rede não atribui PK.
+- Mantém as passagens de nível, EDF, dados de campo, sincronização central, pesquisa rodoviária e os hectómetros (interruptor mostrar/ocultar).
+
+### Compilação e entrega da cartografia
+
+A distribuição do **código-fonte** contém `scripts/restore-v40-compat.mjs`. O GitHub Actions descarrega a geometria nacional e o eixo IP offline do Oeste de um **commit fixo e público do mesmo repositório**, restaura o inventário das **103 PN** e verifica a cartografia com `npm run verify:network`, ANTES de gerar `dist/` e a APK. Os ficheiros nacionais ficam incluídos na WebApp e APK já compiladas, não precisam de descarga pelo utilizador. A compilação **falha explicitamente** se a geometria nacional estiver ausente/incompleta. Esta dependência de rede existe **no GitHub Actions**; depois de compilada, a geometria fica incluída localmente na aplicação. A base de ruas OSM e a pesquisa de itinerários rodoviários continuam a precisar de internet.
+
+**Atenção:** o ZIP de código-fonte não transporta diretamente o JSON de ~1,6 MB nem o eixo IP original de ~118 KB: esses ficheiros são restaurados automaticamente durante a compilação pelo script referido. Para gerar a aplicação fora do GitHub Actions, corre `npm install`, `npm run repair:data`, `npm run verify:network`, `npm test`, `npm run prepare:maps`, `npm run build` numa máquina com internet. Sem essa restauração, a aplicação sinaliza a falta da rede nacional.
+
+### Validação
+
+Passam localmente 57 testes unitários/integração disponíveis neste ZIP. **A execução integral dos testes históricos e a compilação Android/WebApp precisam de confirmação no GitHub Actions**, pois este ambiente não permitiu descarregar as dependências e a cartografia original.
+
+### Instalação no GitHub
+
+1. Antes de atualizar uma instalação, faz **Exportar backup JSON** para preservar os dados locais.
+2. Descompacta o ZIP e envia **todas as pastas/ficheiros** para a raiz de `https://github.com/ruijpedro/RJP-Navigator`, incluindo `.github/workflows`, `src`, `scripts`, `tests` e `public`.
+3. **Actions → Build RJP Navigator APK V4.2** para Android; **Build RJP Navigator WebApp V4.2** para WebApp; ou **Publicar RJP Navigator WebApp V4.2** para atualizar GitHub Pages.
+4. Verifica nos logs a mensagem `RJP V4.2: cartografia nacional pronta — ... linhas, ... segmentos reais.`. O artefacto `dist/data/rede-ferroviaria-nacional.json` deve constar na WebApp.
+
+---
+
 # RJP Navigator V4.1 — Hectómetros e calibração assistida por marcos OSM
 
 **Novidades**

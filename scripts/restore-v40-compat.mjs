@@ -44,8 +44,9 @@ const current=await read('src/main.jsx');
 // Idempotente: permite executar npm test e Actions sem repetir o descarregamento.
 if(current.includes(note)){
  const pn=await read('src/data/passagensNivel.js');
+ const national=JSON.parse(await read('public/data/rede-ferroviaria-nacional.json'));
  const preload=JSON.parse(await read('public/data/linha-oeste-preload.json'));
- if(pn.includes('São 103 PN únicas')&&preload?.route?.coords?.length>4000){
+ if(pn.includes('São 103 PN únicas')&&preload?.route?.coords?.length>4000&&national?.linhas?.length>=40){
   console.log('RJP V4.1.1: compatibilidade já restaurada (103 PN e eixo offline).');
   process.exit(0);
  }
@@ -99,6 +100,8 @@ main='// '+note+' — preserva GPS/PK/PN/EDF e hectómetros.\n'+main;
 // Substituir os ficheiros só depois de validar as entradas históricas.
 for(const p of oldFiles)await put(p,historical[p]);
 if(missing)await put(requiredLarge,historical[requiredLarge]);
+const nationalData=JSON.parse(await read(requiredLarge));
+if((nationalData.linhas||[]).length<40)throw Error('Dados nacionais ausentes: integração abortada.');
 await put('src/lib/national-v40.js',historical['src/lib/national.js']);
 await put('src/lib/national.js',national+"\n// API V4.0 para segmentos nacionais e cálculos rodoviários\nexport * from './national-v40.js';\n");
 await put('src/main.jsx',main);

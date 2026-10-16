@@ -34,3 +34,10 @@
 .national-file{max-width:100%;width:100%}
 @media(max-width:980px){.national-layout{grid-template-columns:1fr}.national-lead{display:block}.national-stats{margin-top:14px}.national-map{height:440px}}
 @media(max-width:560px){.national-fields{grid-template-columns:1fr}.national-map{height:380px}.national-result dl{grid-template-columns:115px 1fr}.national-stats{display:grid;grid-template-columns:repeat(3,1fr)}.national-stats span{padding:7px}}
+
+/* V4.2 — GPS detecta automaticamente linha e PK (quando calibrado) */
+.rjp-gps-nearest{margin:12px 14px;padding:14px 16px;border-left:5px solid #087e61;background:#f0f9f4}
+.rjp-gps-nearest-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.rjp-gps-nearest p{margin:6px 0 9px}
+.rjp-gps-nearest button{max-width:100%}
+@media(max-width:600px){.rjp-gps-nearest{margin:8px;padding:12px}}

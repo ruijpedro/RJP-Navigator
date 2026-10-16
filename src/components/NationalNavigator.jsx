@@ -6,10 +6,11 @@ import {findRoadAccess} from '../lib/access.js';
 import {parsePK,formatPK,downloadText,validGPS} from '../lib/rail.js';
 import limites from '../data/limites.json';
 import {
- RAIL_LINES,NATIONAL_CATALOGUE_NOTE,parseAnchorCSV,calibrateReferences,lineFromGeoJSON,
+ RAIL_LINES,NATIONAL_CATALOGUE_NOTE,parseAnchorCSV,calibrateReferences,lineFromGeoJSON,makeRoute,idForLine,
  pointForPK,pkForPoint,relationSearchQuery,relationWaysQuery,waysToSegments,pathBetweenAnchors,
  nearestOnLine
 } from '../lib/national.js';
+import {NATIONAL_PRESETS} from '../lib/national-presets-v42.js';
 import {milestoneQueryForRoute,parseMilestoneOSM,assessMilestones,improveCalibrationWithMilestones,generateHectometers,calibrationDiagnostics} from '../lib/hectometers.js';
 
 const CACHE='rjp_nav_nacional_v4';
@@ -25,9 +26,11 @@ const waze=p=>`https://www.waze.com/ul?ll=${p.lat}%2C${p.lng}&navigate=yes`;
 const osmLink=p=>`https://www.openrailwaymap.org/?style=standard&lat=${p.lat}&lon=${p.lng}&zoom=15`;
 const defaultCenter=[39.6,-8.2];
 const safeFeatureCount=100000;
+const EMPTY_ARRAY=Object.freeze([]);
+const EMPTY_OBJECT=Object.freeze({});
 
-function NationalMap({route,segments,calibration,selectedPoint,onPick,showRail=true,showHectometers=false,hectometers=[],milestones=[]}){
- const mapElement=useRef(),mapRef=useRef(),lineGroup=useRef(),hectoGroup=useRef(),markerGroup=useRef();
+function NationalMap({route,segments,network,calibration,selectedPoint,onPick,showRail=true,showHectometers=false,hectometers=[],milestones=[]}){
+ const mapElement=useRef(),mapRef=useRef(),networkGroup=useRef(),lineGroup=useRef(),hectoGroup=useRef(),markerGroup=useRef();
  const [viewport,setViewport]=useState({zoom:7,bounds:null});
  useEffect(()=>{
   if(!mapElement.current)return;
@@ -35,11 +38,19 @@ function NationalMap({route,segments,calibration,selectedPoint,onPick,showRail=t
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
   L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png',{maxZoom:19,opacity:.86,attribution:'© OpenRailwayMap / OpenStreetMap'}).addTo(map);
   L.control.scale({imperial:false}).addTo(map);
-  lineGroup.current=L.layerGroup().addTo(map);hectoGroup.current=L.layerGroup().addTo(map);markerGroup.current=L.layerGroup().addTo(map);mapRef.current=map;
+  networkGroup.current=L.layerGroup().addTo(map);lineGroup.current=L.layerGroup().addTo(map);hectoGroup.current=L.layerGroup().addTo(map);markerGroup.current=L.layerGroup().addTo(map);mapRef.current=map;
   const refresh=()=>setViewport({zoom:map.getZoom(),bounds:map.getBounds()});map.on('moveend zoomend',refresh);refresh();
   setTimeout(()=>map.invalidateSize(),150);
-  return()=>{map.remove();mapRef.current=null;lineGroup.current=null;hectoGroup.current=null;markerGroup.current=null;};
+  return()=>{map.remove();mapRef.current=null;networkGroup.current=null;lineGroup.current=null;hectoGroup.current=null;markerGroup.current=null;};
  },[]);
+ // Camada nacional verdadeira, pré-integrada durante a compilação. Visível sem importar linhas.
+ useEffect(()=>{if(!networkGroup.current)return;networkGroup.current.clearLayers();
+  if(!Array.isArray(network?.linhas))return;
+  for(const line of network.linhas)for(const seg of line.segmentos||[]){
+   if(!Array.isArray(seg.coords)||seg.coords.length<2)continue;
+   L.polyline(seg.coords,{color:'#647c8e',weight:2,opacity:0.5,interactive:false}).addTo(networkGroup.current);
+  }
+ },[network]);
  useEffect(()=>{
   if(!mapRef.current||!lineGroup.current)return;
   const map=mapRef.current,group=lineGroup.current;group.clearLayers();
@@ -88,19 +99,36 @@ function NationalMap({route,segments,calibration,selectedPoint,onPick,showRail=t
  return <div ref={mapElement} className="leaflet-map national-map" aria-label="Mapa da Rede Ferroviária Nacional"/>;
 }
 
-export default function NationalNavigator({oesteRoute=null,obterGPS,initialLine='oeste'}){
+export default function NationalNavigator({oesteRoute=null,obterGPS,network=null,networkLoading=false,networkError='',focusLine='',gpsNear=null,initialLine='oeste'}){
  const [store,setStore]=useState(load),[lineId,setLineId]=useState(initialLine),[customName,setCustomName]=useState('');
+ const [segmentIndex,setSegmentIndex]=useState(0);
  const [busy,setBusy]=useState(false),[milestoneBusy,setMilestoneBusy]=useState(false),[showHectometers,setShowHectometers]=useState(true),[notice,setNotice]=useState(''),[searchPK,setSearchPK]=useState('115+350');
  const [selectedPoint,setSelectedPoint]=useState(null),[admin,setAdmin]=useState(null),[adminError,setAdminError]=useState(''),[road,setRoad]=useState(null),[roadBusy,setRoadBusy]=useState(false),[roadError,setRoadError]=useState('');
  const [anchorForm,setAnchorForm]=useState({pk:'',lat:'',lng:'',verified:false,note:''});
  const geoInput=useRef(),csvInput=useRef(),backupInput=useRef();
- const anchors=store.anchors||{},routes=store.routes||{},segmentsByLine=store.segments||{},names=store.names||{},milestonesByLine=store.milestones||{};
- const opts=[...RAIL_LINES,...Object.entries(names).filter(([id])=>!RAIL_LINES.some(x=>x.id===id)).map(([id,nome])=>({id,nome}))];
- const line=opts.find(x=>x.id===lineId)||RAIL_LINES[0];
- const lineAnchors=anchors[lineId]||[];
- const currentRoute=routes[lineId]||(lineId==='oeste'?oesteRoute:null);
- const currentSegments=segmentsByLine[lineId]||[];
- const osmMilestones=milestonesByLine[lineId]||[];
+ const anchors=store.anchors||EMPTY_OBJECT,routes=store.routes||EMPTY_OBJECT,segmentsByLine=store.segments||EMPTY_OBJECT,names=store.names||EMPTY_OBJECT,milestonesByLine=store.milestones||EMPTY_OBJECT;
+ const idForNetwork=(name)=>idForLine(name)||String(name).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+ const fromNetwork=(network?.linhas||[]).map(x=>({id:idForNetwork(x.nome),nome:x.nome}));
+ const opts=[...fromNetwork,...RAIL_LINES,...Object.entries(names).map(([id,nome])=>({id,nome}))].filter((x,i,all)=>all.findIndex(v=>v.id===x.id)===i);
+ const line=opts.find(x=>x.id===lineId)||opts[0]||RAIL_LINES[0];
+ const networkLine=(network?.linhas||[]).find(x=>idForNetwork(x.nome)===lineId);
+ const nationalSegments=networkLine?.segmentos||EMPTY_ARRAY;
+ const currentSegments=segmentsByLine[lineId]?.length?segmentsByLine[lineId]:nationalSegments;
+ const selectedNetworkSegment=nationalSegments[segmentIndex]||null;
+ const currentRoute=useMemo(()=>{
+  if(routes[lineId])return routes[lineId];
+  if(selectedNetworkSegment?.coords?.length>1){
+   try{return makeRoute(selectedNetworkSegment.coords,'Rede Ferroviária Nacional integrada — PK por validar');}catch{return null;}
+  }
+  return lineId==='oeste'?oesteRoute:null;
+ },[routes,lineId,selectedNetworkSegment,oesteRoute]);
+ const preset=NATIONAL_PRESETS?.[`${line.nome}|${segmentIndex}`];
+ const convertedAnchors=useMemo(()=>(preset?.anchors||EMPTY_ARRAY).map(a=>a.position==='start'?{...a,lat:currentRoute?.coords?.[0]?.[0],lng:currentRoute?.coords?.[0]?.[1],verified:false}:
+  a.position==='end'?{...a,lat:currentRoute?.coords?.at(-1)?.[0],lng:currentRoute?.coords?.at(-1)?.[1],verified:false}:{...a,verified:false}),[preset,currentRoute]);
+ const lineAnchors=anchors[lineId]?.length>=2?anchors[lineId]:convertedAnchors;
+ useEffect(()=>{setSegmentIndex(0)},[lineId]);
+ useEffect(()=>{if(!focusLine)return;const id=idForNetwork(focusLine);if(opts.some(o=>o.id===id))setLineId(id);},[focusLine,network]);
+ const osmMilestones=milestonesByLine[lineId]||EMPTY_ARRAY;
  const baseCalibration=useMemo(()=>calibrateReferences(currentRoute,lineAnchors),[currentRoute,lineAnchors]);
  const evaluatedMilestones=useMemo(()=>assessMilestones(osmMilestones,baseCalibration),[osmMilestones,baseCalibration]);
  const enhanced=useMemo(()=>improveCalibrationWithMilestones(currentRoute,lineAnchors,evaluatedMilestones),[currentRoute,lineAnchors,evaluatedMilestones]);
@@ -117,7 +145,7 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,initialLine=
  useEffect(()=>{setSelectedPoint(null);setAdmin(null);setRoad(null);setAdminError('');setRoadError('');},[lineId]);
  const getArea=async p=>{setAdmin(null);setAdminError('');try{const area=await reverseAdministrative(p);setAdmin(area);}catch(e){setAdminError('Freguesia/concelho/distrito indisponíveis sem serviço de consulta: '+e.message);}};
  const pick=React.useCallback((p)=>{
-  const route=routes[lineId]||(lineId==='oeste'?oesteRoute:null),segs=segmentsByLine[lineId]||[];
+  const route=currentRoute,segs=currentSegments;
   const calibrationNow=calibration;
   const closest=route?nearestOnLine(p,route):null;
   if(route&&closest?.distance>120){setNotice(`Seleciona mais perto do eixo da linha; afastamento: ${Math.round(closest.distance)} m.`);return;}
@@ -125,7 +153,7 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,initialLine=
   const position=snap?{...snap,pk:found?.pk??null,status:found?.status||'PK indisponível — faltam referências',distance:closest?.distance??null}:{lat:p.lat,lng:p.lng,pk:null,status:'Eixo OSM visível, sem caminho contínuo calibrado'};
   setSelectedPoint(position);setAdmin(null);setRoad(null);setAdminError('');setRoadError('');
   getArea(position);
- },[lineId,routes,segmentsByLine,calibration,oesteRoute]);
+ },[lineId,currentRoute,currentSegments,calibration]);
  const persistRoute=(route)=>{update({routes:{...routes,[lineId]:route},segments:{...segmentsByLine,[lineId]:[]}});};
  const importRoute=async f=>{
   if(!f)return;try{const route=lineFromGeoJSON(JSON.parse(await f.text()));
@@ -191,7 +219,7 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,initialLine=
  async function findRoad(withGps=false){if(!validGPS(selectedPoint?.lat,selectedPoint?.lng))return;setRoadBusy(true);setRoadError('');setRoad(null);
   try{const origin=withGps&&obterGPS?await obterGPS():null;const result=await findRoadAccess(selectedPoint,origin);setRoad(result.recommended);}catch(e){setRoadError(e.message);}finally{setRoadBusy(false);}
  }
- const exportJSON=()=>downloadText(JSON.stringify({version:'4.1.0',exportedAt:new Date().toISOString(),...store},null,2),'RJP_Navigator_RFN_Calibracao_Backup.json','application/json');
+ const exportJSON=()=>downloadText(JSON.stringify({version:'4.2.0',exportedAt:new Date().toISOString(),...store},null,2),'RJP_Navigator_RFN_Calibracao_Backup.json','application/json');
  const exportCSV=()=>{const items=Object.entries(anchors).flatMap(([id,refs])=>refs.map(a=>[names[id]||RAIL_LINES.find(x=>x.id===id)?.nome||id,formatPK(a.pk),a.lat,a.lng,a.verified?'Sim':'Não',a.source]));
   const csv='\uFEFF'+[['linha','pk','latitude','longitude','validado','fonte'],...items].map(row=>row.map(v=>'"'+String(v||'').replaceAll('"','""')+'"').join(';')).join('\r\n');downloadText(csv,'RJP_Navigator_RFN_Referencias.csv','text/csv;charset=utf-8');};
  const importBackup=async f=>{if(!f)return;try{const data=JSON.parse(await f.text());if(!data||typeof data!=='object'||!data.anchors||!data.routes)throw Error('Formato inválido');
@@ -201,15 +229,19 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,initialLine=
  const routeStatus=calibration.ready?`Calibração estimada entre ${formatPK(calibration.span[0])} e ${formatPK(calibration.span[1])} — ${calibration.anchors.length} referências${calibration.verified?' verificadas':' (algumas por validar)'}`:calibration.reason;
  const linesWithAnchors=Object.values(anchors).filter(a=>a.length>=2).length;
  return <main className="national-view">
-  <section className="card national-lead"><div><h2>Rede Ferroviária Nacional · V4.1</h2><p>Cartografia ferroviária nacional no mapa e motor de calibração por linha. A Linha do Oeste mantém a sua área de responsabilidade no separador original.</p></div>
-   <div className="national-stats"><span><b>{opts.length}</b> linhas no catálogo</span><span><b>{linesWithAnchors}</b> com ≥2 referências</span><span><b>{Object.values(routes).filter(Boolean).length+(oesteRoute&&!routes.oeste?1:0)}</b> eixos carregados</span></div>
+  <section className="card national-lead"><div><h2>Rede Ferroviária Nacional · V4.2</h2><p>Geometria de toda a rede incorporada na WebApp/APK e motor de calibração por linha. A Linha do Oeste mantém a sua área de responsabilidade no separador original.</p></div>
+   <div className="national-stats"><span><b>{opts.length}</b> linhas no catálogo</span><span><b>{linesWithAnchors}</b> com ≥2 referências</span><span><b>{(network?.linhas||[]).reduce((n,l)=>n+(l.segmentos?.filter(s=>s.coords?.length>1).length||0),0)}</b> segmentos nacionais disponíveis</span></div>
   </section>
   <section className="national-layout">
    <div className="card national-side">
+    {networkLoading&&<p>A carregar a geometria de toda a rede ferroviária…</p>}
+    {networkError&&<p className="warning">{networkError}</p>}
     <h3>Selecionar linha</h3><select aria-label="Linha ferroviária" value={lineId} onChange={e=>setLineId(e.target.value)}>{opts.map(x=><option key={x.id} value={x.id}>{x.nome}</option>)}</select>
+    {nationalSegments.length>1&&<label>Troço da linha <select aria-label="Troço ferroviário" value={segmentIndex} onChange={e=>setSegmentIndex(Number(e.target.value))}>{nationalSegments.map((seg,i)=><option value={i} key={i}>Troço {i+1} · {Array.isArray(seg.coords)?seg.coords.length:0} vértices</option>)}</select></label>}
+    <p className="footnote">{network?.linhas?.length||0} linhas na base nacional, {nationalSegments.length} troços na linha selecionada. A geometria é integrada no pacote; PK estimados apenas entre referências compatíveis.</p>
     <p className="footnote">{NATIONAL_CATALOGUE_NOTE}</p>
     <p><strong>Estado:</strong> {routeStatus}</p>
-    <p className="footnote">A cartografia base (OpenRailwayMap) mostra a ferrovia nacional com internet. O traçado completo por linha e os PK só ficam disponíveis quando existirem geometrias e referências adequadas.</p>
+    <p className="footnote">O eixo nacional vem do pacote compilado, sem importação manual. As imagens de ruas (OpenStreetMap) e a atualização de estradas continuam a precisar de internet.</p>
     <button type="button" disabled={busy} onClick={fetchLineOSM}>{busy?'A consultar OSM...':'Procurar eixo OSM desta linha'}</button>
     <button type="button" disabled={milestoneBusy||!currentRoute} onClick={()=>fetchMilestones(false)}>{milestoneBusy?'A procurar marcos...':'Procurar marcos PK no OpenStreetMap'}</button>
     <label className="national-check hecto-toggle"><input type="checkbox" checked={showHectometers} onChange={e=>setShowHectometers(e.target.checked)}/> Mostrar hectométricos (100 m) e marcos OSM</label>
@@ -223,7 +255,8 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,initialLine=
     <div className="national-separator"><h3>Adicionar linha/ramal</h3><div className="inline-fields"><input aria-label="Nome nova linha" value={customName} onChange={e=>setCustomName(e.target.value)} placeholder="Designação ferroviária"/><button onClick={addCustom}>Adicionar</button></div></div>
    </div>
    <section className="card national-map-card"><h3>Mapa ferroviário de Portugal</h3>
-    <NationalMap route={calibration.route||currentRoute} segments={currentSegments} calibration={calibration} selectedPoint={selectedPoint} onPick={pick} showHectometers={showHectometers} hectometers={hectometers} milestones={evaluatedMilestones}/>
+    {gpsNear&&<div className="national-message"><strong>GPS: {gpsNear.line}</strong> · {gpsNear.pkLabel?'PK '+gpsNear.pkLabel+' (estimado)':'PK sem calibração'} · {gpsNear.offsetMeters} m até ao eixo. {gpsNear.calibrationStatus}</div>}
+    <NationalMap route={calibration.route||currentRoute} segments={currentSegments} network={network} calibration={calibration} selectedPoint={selectedPoint} onPick={pick} showHectometers={showHectometers} hectometers={hectometers} milestones={evaluatedMilestones}/>
     <p className="footnote">Toca no eixo realçado para obter coordenadas. Camada opcional: roxo = hectómetros virtuais de 100 m (visíveis com zoom ≥ 11); azul = marcos OSM coerentes por validar; laranja = marcos OSM discordantes. A posição não substitui a referenciação oficial.</p>
     {notice&&<div className="national-message">{notice}<button onClick={()=>setNotice('')} aria-label="Fechar aviso">×</button></div>}
     {selectedPoint&&<div className="national-result"><h3>{selectedPoint.pk!=null?`PK ${formatPK(selectedPoint.pk)}`:'Ponto ferroviário (PK ainda não calibrado)'}</h3>
@@ -246,7 +279,7 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,initialLine=
     <button onClick={addAnchor}>Guardar referência</button>
    </div>
    <div className="table-scroll"><table><thead><tr><th>PK</th><th>Latitude</th><th>Longitude</th><th>Estado</th><th>Fonte</th></tr></thead><tbody>{[...lineAnchors].sort((a,b)=>a.pk-b.pk).map((a,i)=><tr key={i}><td>{formatPK(a.pk)}</td><td>{a.lat}</td><td>{a.lng}</td><td>{a.verified?'Confirmado':'Por validar'}</td><td>{a.source||'—'}</td></tr>)}{lineAnchors.length===0&&<tr><td colSpan="5">Nenhuma referência disponível nesta linha.</td></tr>}</tbody></table></div>
-   <p className="footnote">Fontes: Infraestruturas de Portugal (RFN, estações e PK verificados), Direção-Geral do Território (CAOP) e OpenStreetMap/OpenRailwayMap. A V4.1 ainda não inclui um cadastro nacional oficial completo dos PK; não é apropriado usar estimativas como coordenadas de segurança operacional.</p>
+   <p className="footnote">Fontes: Infraestruturas de Portugal (RFN, estações e PK verificados), Direção-Geral do Território (CAOP) e OpenStreetMap/OpenRailwayMap. A V4.2 ainda não inclui um cadastro nacional oficial completo dos PK; não é apropriado usar estimativas como coordenadas de segurança operacional.</p>
   </section>
  </main>;
 }
