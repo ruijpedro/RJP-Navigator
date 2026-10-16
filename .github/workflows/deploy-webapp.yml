@@ -1,4 +1,4 @@
-name: Publicar RJP Navigator WebApp V4.1.1
+name: Publicar RJP Navigator WebApp V4.2
 
 on:
   push:
@@ -37,6 +37,7 @@ jobs:
       - name: Recuperar dados e funções e executar testes
         run: |
           npm run repair:data
+          npm run verify:network
           npm test
           RJP_REQUIRE_MAPS=1 npm run prepare:maps
       - name: Compilar WebApp para GitHub Pages

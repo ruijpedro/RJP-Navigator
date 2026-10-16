@@ -1,4 +1,4 @@
-name: Build RJP Navigator WebApp V4.1.1
+name: Build RJP Navigator WebApp V4.2
 
 on:
   workflow_dispatch:
@@ -49,6 +49,9 @@ jobs:
       - name: Repor dados e funções V4.0 (103 PN e cartografia IP)
         run: npm run repair:data
 
+      - name: Verificar a rede ferroviária nacional integrada
+        run: npm run verify:network
+
       - name: Executar testes
         run: npm test
 
@@ -62,13 +65,14 @@ jobs:
         shell: bash
         run: |
           test -s dist/index.html
-          echo 'WebApp V4.1.1 compilada:'
+          test -s dist/data/rede-ferroviaria-nacional.json
+          echo 'WebApp V4.2 compilada:'
           ls -lah dist/
 
       - name: Disponibilizar WebApp para descarregar
         uses: actions/upload-artifact@v4
         with:
-          name: RJP_Navigator_V4_1_WebApp
+          name: RJP_Navigator_V4_2_WebApp
           path: dist/
           if-no-files-found: error
           retention-days: 30
