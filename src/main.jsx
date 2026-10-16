@@ -1,4 +1,4 @@
-import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
+import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import './style.css';
 import L from 'leaflet';
@@ -10,11 +10,9 @@ import limite from './data/limites.json';
 import {PK_START,PK_END,parsePK,formatPK,validGPS,parseRouteGeoJSON,orientAndValidateRoute,interpolatePK,deriveAssetLocation,downloadText,makeKML} from './lib/rail.js';
 import {fetchOverpass,createRouteFromOSM,parseOSMAssets,associateOSM,closestOnRoute,REL_QUERY,ASSET_QUERY} from './lib/osm.js';
 import {fetchBundledCartography} from './lib/preload.js';
-import {getRailwayFromOSM} from './lib/osm-direct.js';
 import {findRoadAccess} from './lib/access.js';
-import NationalNavigator from './NationalNavigator.jsx';
-import {ASSETS_SCHEMA,ASSETS_CACHE_KEY,normalizeAssetsPayload,isValidCachedAssets,pnFromAssets,fetchAssetsGoogleSheetJSONP,ASSET_TYPES,assetIsActive} from './lib/assets-sync.js';
-import {ASSETS_CONFIG_STORAGE,ASSETS_SYNC_INTERVAL_MS,readSavedAssetsConfig,fetchAssetsCentralConfig} from './lib/assets-config.js';
+import {identifyRailPoint,reverseAdministrative} from './lib/identify.js';
+import NationalNavigator from './components/NationalNavigator.jsx';
 
 const REF_START={lat:limite.responsibility_segment.points[0].wgs84.latitude,lng:limite.responsibility_segment.points[0].wgs84.longitude};
 const REF_END={lat:limite.responsibility_segment.points[1].wgs84.latitude,lng:limite.responsibility_segment.points[1].wgs84.longitude};
@@ -27,18 +25,19 @@ const routeMaps=(p)=>`https://www.google.com/maps/dir/?api=1&destination=${encod
 const waze=(p)=>`https://waze.com/ul?ll=${encodeURIComponent(coord(p))}&navigate=yes`;
 const railMap=(p)=>`https://www.openrailwaymap.org/?style=standard&lat=${p.lat}&lon=${p.lng}&zoom=15`;
 const isPositioned=a=>validGPS(a?.lat,a?.lng);
-const getBase=(pnList=passagensNivelLinhaOeste)=>[
+const getBase=()=>[
  {id:'limite-inicial',key:'ref-inicial',titulo:'Limite inicial · PK 21+191',nome:'Início do troço de responsabilidade',pk:'21+191',categoria:'Marco Quilométrico',lat:REF_START.lat,lng:REF_START.lng,observacoes:'Coordenada fornecida pelo utilizador, conversão EPSG:3763 assumida e por confirmar.'},
  {id:'limite-final',key:'ref-final',titulo:'Limite final · PK 191+191',nome:'Fim do troço de responsabilidade',pk:'191+191',categoria:'Marco Quilométrico',lat:REF_END.lat,lng:REF_END.lng,observacoes:'Coordenada fornecida pelo utilizador, conversão EPSG:3763 assumida e por confirmar.'},
  ...estacoesLinhaOeste.map(s=>({...s,key:`est-${s.id}`,titulo:s.nome})),
  ...estacoesLinhaOeste.filter(s=>s.tipo.includes('Estação')).map(s=>({...s,key:`edf-${s.id}`,categoria:'Edifício',titulo:`EDF · ${s.nome}`,observacoes:'Edifício associado à estação; a posição do edifício tem de ser confirmada separadamente do eixo ferroviário.'})),
- ...pnList.map(p=>({...p,key:`pn-${p.id}`,titulo:`PN · PK ${p.pk}${(p.estadoDados?.startsWith('PK coincidente')||p.estadoDados?.startsWith('Sincronizada'))&&p.nome&&!/^PN km/i.test(p.nome)?' · '+p.nome:''}`})),
+ ...passagensNivelLinhaOeste.map(p=>({...p,key:`pn-${p.id}`,titulo:`PN · PK ${p.pk} · ${p.nome}`})),
  ...marcosKmLinhaOeste.map(p=>({...p,key:`km-${p.id}`,titulo:p.nome}))
 ];
 // Leaflet distribuído com a APK/WebApp: não depende de carregar JavaScript por CDN.
 function ensureLeaflet(){return Promise.resolve(L);}
-function Mapa({assets,route,selected,onSelect,roadAccess=null,railTarget=null}){
+function Mapa({assets,route,selected,onSelect,onTrackPick,identifiedPoint=null,roadAccess=null,railTarget=null}){
  const el=useRef(null),instance=useRef(null),overlay=useRef(null),layers=useRef(null);
+ const trackPickRef=useRef(onTrackPick);trackPickRef.current=onTrackPick;
  const [err,setErr]=useState('');const [railLayer,setRailLayer]=useState(true);
  useEffect(()=>{let alive=true;ensureLeaflet().then(L=>{if(!alive||!el.current)return;
   const map=L.map(el.current,{preferCanvas:true,scrollWheelZoom:false});
@@ -54,7 +53,14 @@ function Mapa({assets,route,selected,onSelect,roadAccess=null,railTarget=null}){
  },[]);
  useEffect(()=>{if(!instance.current||!overlay.current)return;if(railLayer&&!instance.current.hasLayer(overlay.current))overlay.current.addTo(instance.current);if(!railLayer&&instance.current.hasLayer(overlay.current))instance.current.removeLayer(overlay.current);},[railLayer]);
  function drawMap(){if(!layers.current)return;layers.current.clearLayers();
-  if(route?.coords?.length>1)L.polyline(route.coords,{color:'#00b3b7',weight:5,opacity:.92}).bindTooltip('Linha do Oeste — eixo cartografado; PK por interpolação aproximada').addTo(layers.current);
+  if(route?.coords?.length>1){
+   L.polyline(route.coords,{color:'#00b3b7',weight:5,opacity:.92,interactive:false}).addTo(layers.current);
+   // Invisible but wide touch target: usable with fingers on Android and iOS.
+   L.polyline(route.coords,{color:'#00b3b7',weight:24,opacity:0.01,interactive:true})
+    .bindTooltip('Toca para identificar PK e freguesia')
+    .on('click',event=>{L.DomEvent.stopPropagation(event);trackPickRef.current?.(event.latlng);})
+    .addTo(layers.current);
+  }
   for(const [pk,p,name] of [[formatPK(PK_START),REF_START,'Início da responsabilidade'],[formatPK(PK_END),REF_END,'Fim da responsabilidade']]){
     L.circleMarker([p.lat,p.lng],{radius:9,color:'#0f4131',fillColor:'#ffda7c',weight:3,fillOpacity:1}).bindPopup(`${name}<br>PK ${pk}`).addTo(layers.current);
   }
@@ -63,88 +69,71 @@ function Mapa({assets,route,selected,onSelect,roadAccess=null,railTarget=null}){
    L.circleMarker([Number(a.lat),Number(a.lng)],{radius:a.key===selected?.key?8:5,color:'#fff',weight:1.5,fillColor:color,fillOpacity:.95})
     .bindTooltip(`${a.titulo} · ${a.gpsStatus}`).on('click',()=>onSelect(a.key)).addTo(layers.current);
   }
+  if(isPositioned(identifiedPoint))L.circleMarker([identifiedPoint.lat,identifiedPoint.lng],{radius:9,color:'#7133ac',weight:3,fillColor:'#e8cbff',fillOpacity:1}).bindTooltip(`PK ${identifiedPoint.pkLabel} — ponto identificado no eixo`).addTo(layers.current);
   if(isPositioned(railTarget))L.circleMarker([Number(railTarget.lat),Number(railTarget.lng)],{radius:10,color:'#ed8a15',weight:3,fillColor:'#ffdb92',fillOpacity:1}).bindPopup('PK ferroviário pesquisado — localização aproximada').addTo(layers.current);
   if(isPositioned(roadAccess)){
    L.circleMarker([Number(roadAccess.lat),Number(roadAccess.lng)],{radius:10,color:'#1460ae',weight:3,fillColor:'#b6defe',fillOpacity:1}).bindPopup(`Destino rodoviário sugerido · ${Math.round(roadAccess.gapMeters)} m em linha reta ao PK. Acesso não confirmado.`).addTo(layers.current);
   }
   if(isPositioned(selected)){L.circleMarker([Number(selected.lat),Number(selected.lng)],{radius:11,weight:3,color:'#004e33',fillColor:'#fff',fillOpacity:0.4}).addTo(layers.current);}
  }
- useEffect(()=>{if(!instance.current)return;drawMap(); },[assets,route,selected?.key,selected?.lat,selected?.lng,roadAccess?.lat,roadAccess?.lng,railTarget?.lat,railTarget?.lng]);
+ useEffect(()=>{if(!instance.current)return;drawMap(); },[assets,route,selected?.key,selected?.lat,selected?.lng,roadAccess?.lat,roadAccess?.lng,railTarget?.lat,railTarget?.lng,identifiedPoint?.lat,identifiedPoint?.lng]);
  useEffect(()=>{if(!instance.current)return;
   if(isPositioned(roadAccess)&&isPositioned(railTarget))instance.current.fitBounds(L.latLngBounds([[Number(railTarget.lat),Number(railTarget.lng)],[Number(roadAccess.lat),Number(roadAccess.lng)]]).pad(.55),{maxZoom:16});
+  else if(isPositioned(identifiedPoint))instance.current.setView([identifiedPoint.lat,identifiedPoint.lng],15);
   else if(isPositioned(selected)) instance.current.setView([Number(selected.lat),Number(selected.lng)],14);
   else if(route?.coords?.length>1)instance.current.fitBounds(L.latLngBounds(route.coords).pad(.07));
   else instance.current.fitBounds(L.latLngBounds([REF_START.lat,REF_START.lng],[REF_END.lat,REF_END.lng]).pad(.12));
-  },[selected?.key,route,roadAccess?.lat,roadAccess?.lng,railTarget?.lat,railTarget?.lng]);
+  },[selected?.key,route,roadAccess?.lat,roadAccess?.lng,railTarget?.lat,railTarget?.lng,identifiedPoint?.lat,identifiedPoint?.lng]);
  return <div className="map-shell"><label className="check"><input type="checkbox" checked={railLayer} onChange={e=>setRailLayer(e.target.checked)}/> Realçar a rede ferroviária (OpenRailwayMap)</label>
    <div className="leaflet-map" ref={el} aria-label="Mapa interativo da Linha do Oeste"></div>{err&&<div className="warning">{err}. <a href={railMap(REF_START)} target="_blank" rel="noreferrer">Abrir mapa ferroviário externo</a>.</div>}
-   <p className="footnote">Eixo da Linha do Oeste incluído no pacote a partir da cartografia IP. Os PK intermédios são estimados por interpolação de quilometragem; GPS de campo validado tem prioridade. Acesso rodoviário tem de ser confirmado.</p></div>;
+   <p className="footnote"><b>Toque na linha azul/turquesa</b> para identificar um PK e consultar freguesia, concelho e distrito. Sem eixo carregado, a aplicação não pode calcular o PK. O mapa abre diretamente; os dados completos são pré-carregados na APK quando a fonte responder durante a compilação, ou obtidos automaticamente. Amarelo = interpolação; azul = correspondência OSM; verde = GPS confirmado no terreno. As coordenadas OSM não equivalem a certificação IP. Acesso rodoviário deve ser confirmado.</p></div>;
 }
-
 function App(){
  const [tab,setTab]=useState('mapa'),[q,setQ]=useState(''),[tipo,setTipo]=useState('todos'),[selKey,setSelKey]=useState(''),[notice,setNotice]=useState('');
- const [redeNacional,setRedeNacional]=useState(null),[linhaSelecionada,setLinhaSelecionada]=useState('Linha do Oeste');
  const [loadingOSM,setLoadingOSM]=useState(false),[osmError,setOsmError]=useState(''),[preloadStatus,setPreloadStatus]=useState('A carregar mapa predefinido...');
  const [gps,setGps]=useState(null),[extras,setExtras]=useState(()=>read(K.extras,[])),[desloc,setDesloc]=useState(()=>read(K.desloc,[])),[gpsAtivos,setGpsAtivos]=useState(()=>read(K.gps,{})),[pkAtivos,setPkAtivos]=useState(()=>read(K.pk,{})),[accessos,setAccessos]=useState(()=>read(K.access,{})),[route,setRoute]=useState(()=>read(K.route,null)),[osmPoints,setOsmPoints]=useState(()=>read(K.osm,[]));
  const [accessLoading,setAccessLoading]=useState(false),[roadResult,setRoadResult]=useState(null),[roadError,setRoadError]=useState(''),[roadChoice,setRoadChoice]=useState('');
+ const [identified,setIdentified]=useState(null),[admin,setAdmin]=useState(null),[adminLoading,setAdminLoading]=useState(false),[adminError,setAdminError]=useState('');
  const [pkBusca,setPkBusca]=useState('115+350'),[consulta,setConsulta]=useState(null),[pkEdit,setPkEdit]=useState(''),[manualEdit,setManualEdit]=useState({lat:'',lng:''}),[accessEdit,setAccessEdit]=useState({lat:'',lng:'',nota:''});
  useEffect(()=>{setManualEdit({lat:'',lng:''});setPkEdit('');},[selKey]);
  const [form,setForm]=useState({categoria:'Passagem de Nível',nome:'',pk:'',localidade:'',concelho:'',freguesia:'',observacoes:''});
  const importRef=useRef(null),jsonRef=useRef(null);
- const [assetsConfig,setAssetsConfig]=useState(()=>readSavedAssetsConfig(read(ASSETS_CONFIG_STORAGE,null)));
- const [assetsSnapshot,setAssetsSnapshot]=useState(()=>{const cached=read(ASSETS_CACHE_KEY,null);return isValidCachedAssets(cached)?cached:null;});
- const [assetsSyncStatus,setAssetsSyncStatus]=useState({kind:'',message:''});
- const [assetsSyncLoading,setAssetsSyncLoading]=useState(false);
- const syncInFlight=useRef(false),assetsSnapshotRef=useRef(assetsSnapshot),assetsConfigRef=useRef(assetsConfig);
- useEffect(()=>{assetsSnapshotRef.current=assetsSnapshot;},[assetsSnapshot]);
- useEffect(()=>{assetsConfigRef.current=assetsConfig;},[assetsConfig]);
- const allCentralAssets=useMemo(()=>{
-  if(assetsSnapshot){try{return normalizeAssetsPayload(assetsSnapshot,{previousCount:103});}catch{}}
-  // PN locais distribuídas com a APK/WebApp: versão offline original.
-  return passagensNivelLinhaOeste.map(p=>({id:'LO-PN-'+String(parsePK(p.pk)).padStart(6,'0'),linha:'Linha do Oeste',tipo:'PN',pk:p.pk,nome:p.nome||'',localidade:p.localidade||'',concelho:p.concelho||'',freguesia:p.freguesia||'',lat:p.lat??'',lng:p.lng??'',estado:'Ativo',observacoes:p.observacoes||'',fonte:'PN LO.xlsx / base local'}));
- },[assetsSnapshot]);
- const ativosCentrais=useMemo(()=>allCentralAssets.filter(assetIsActive),[allCentralAssets]);
- const pnList=useMemo(()=>pnFromAssets(ativosCentrais),[ativosCentrais]);
- const base=useMemo(()=>[...getBase(pnList),...extras.map((x,i)=>({...x,key:x.key||`extra-${i}`,titulo:x.nome||x.pk||'Local registado'}))],[extras,pnList]);
- // A mesma configuração remota serve todas as instalações: nenhum dispositivo precisa de setup próprio.
- const atualizarAtivos=useCallback(async(quiet=false)=>{
-  if(syncInFlight.current)return;
-  if(typeof navigator!=='undefined'&&navigator.onLine===false){if(!quiet)setAssetsSyncStatus({kind:'error',message:'Sem internet. Mantida a cópia local dos ativos.'});return;}
-  syncInFlight.current=true;setAssetsSyncLoading(true);
-  if(!quiet)setAssetsSyncStatus({kind:'busy',message:'A consultar a base central de ativos…'});
-  let configuration=assetsConfigRef.current,usedCached=false;
-  try{
-   try{
-    configuration=await fetchAssetsCentralConfig();
-    if(!persist(ASSETS_CONFIG_STORAGE,configuration))throw Error('Não foi possível guardar configuração local.');
-    assetsConfigRef.current=configuration;setAssetsConfig(configuration);
-   }catch(e){if(!configuration?.enabled)throw Error('Configuração central indisponível: '+e.message);usedCached=true;}
-   if(!configuration?.enabled){if(!quiet)setAssetsSyncStatus({kind:'pending',message:'A aguardar a ativação única do Apps Script; base local disponível.'});return;}
-   const result=await fetchAssetsGoogleSheetJSONP(configuration.feedUrl);
-   if(result?.error)throw Error(String(result.error).slice(0,160));
-   const previous=assetsSnapshotRef.current?.rows?.length||103;
-   const normalized=normalizeAssetsPayload(result,{previousCount:previous});
-   const snapshot={schema:ASSETS_SCHEMA,rows:result.rows,updatedAt:new Date().toISOString()};
-   if(!persist(ASSETS_CACHE_KEY,snapshot))throw Error('Não foi possível guardar a base de ativos offline.');
-   assetsSnapshotRef.current=snapshot;setAssetsSnapshot(snapshot);
-   setAssetsSyncStatus({kind:'ok',message:`${normalized.length} ativos sincronizados (${new Date().toLocaleString('pt-PT')})${usedCached?' · configuração guardada anteriormente':''}.`});
-  }catch(e){if(!quiet||assetsConfigRef.current?.enabled)setAssetsSyncStatus({kind:'error',message:`Sincronização indisponível: ${e.message||'erro'}. Mantida a base local.`});}
-  finally{syncInFlight.current=false;setAssetsSyncLoading(false);}
- },[]);
- useEffect(()=>{
-  atualizarAtivos(true);
-  const timer=setInterval(()=>atualizarAtivos(true),ASSETS_SYNC_INTERVAL_MS);
-  const onFocus=()=>{if(document.visibilityState==='visible')atualizarAtivos(true);};
-  const onOnline=()=>atualizarAtivos(true);
-  document.addEventListener('visibilitychange',onFocus);window.addEventListener('online',onOnline);
-  return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',onFocus);window.removeEventListener('online',onOnline);};
- },[atualizarAtivos]);
+ const base=useMemo(()=>[...getBase(),...extras.map((x,i)=>({...x,key:x.key||`extra-${i}`,titulo:x.nome||x.pk||'Local registado'}))], [extras]);
  const gpsAnchors=useMemo(()=>{
   if(!route)return [];
   return base.filter(a=>parsePK(pkAtivos[a.key]||a.pk)!=null&&gpsAtivos[a.key]&&gpsAtivos[a.key].origin!=='manual'&&validGPS(gpsAtivos[a.key].lat,gpsAtivos[a.key].lng)).map(a=>{
    const p=closestOnRoute(gpsAtivos[a.key],route);return p&&p.distance<=200?{pk:parsePK(pkAtivos[a.key]||a.pk),along:p.along}:null;
   }).filter(Boolean);
  },[base,gpsAtivos,pkAtivos,route]);
+ function onTrackPick(latlng){
+  const result=identifyRailPoint(latlng,route,gpsAnchors);
+  if(!result){setNotice('Ainda sem eixo ferroviário carregado. Verifica a cartografia e tenta novamente.');return;}
+  setIdentified(result);setAdmin(null);setAdminError('');
+  setSelKey('');
+ }
+ // Fetch on explicit map tap only. Trailing delay avoids sending bulk queries when tapping.
+ // No administrative unit is fabricated from nearby station names or arbitrary postal areas.
+ useEffect(()=>{
+  if(!identified)return;
+  let active=true;
+  const controller=new AbortController();
+  const key=`${identified.lat.toFixed(5)}|${identified.lng.toFixed(5)}`;
+  const timer=setTimeout(async()=>{
+   setAdminLoading(true);
+   try{
+    const cache=read('rjp_nav_admin_click_v36',{});
+    const stored=cache[key];
+    if(stored){if(active)setAdmin(stored);return;}
+    const result=await reverseAdministrative(identified,fetch,controller.signal);
+    if(!active)return;
+    setAdmin(result);
+    const entries=Object.entries(cache).slice(-79);
+    persist('rjp_nav_admin_click_v36',Object.fromEntries([...entries,[key,result]]));
+   }catch(error){if(active&&error.name!=='AbortError')setAdminError(error.message||'Não foi possível identificar os limites administrativos.');}
+   finally{if(active)setAdminLoading(false);}
+  },1200);
+  return()=>{active=false;clearTimeout(timer);controller.abort();};
+ },[identified?.lat,identified?.lng]);
  const osmAssociations=useMemo(()=>associateOSM(base,route,osmPoints),[base,route,osmPoints]);
  const assets=useMemo(()=>base.map(a=>deriveAssetLocation(a,gpsAtivos,pkAtivos,route,osmAssociations,gpsAnchors)),[base,gpsAtivos,pkAtivos,route,osmAssociations,gpsAnchors]);
  const indexed=useMemo(()=>new Map(assets.map(a=>[a.key,a])),[assets]);
@@ -209,7 +198,7 @@ function App(){
   const id=`extra-${Date.now()}`;const next=[{...form,id,key:id,linha:'Linha do Oeste',lat:gps?.lat||'',lng:gps?.lng||''},...extras];
   setExtras(next);persist(K.extras,next);setSelKey(id);changeTab('locais');setForm({categoria:'Passagem de Nível',nome:'',pk:'',localidade:'',concelho:'',freguesia:'',observacoes:''});}
  function registarDeslocacao(a){const next=[{id:Date.now(),data:new Date().toLocaleDateString('pt-PT'),hora:new Date().toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}),destino:a.titulo,pk:a.pk,gps:gps?coord(gps):''},...desloc];setDesloc(next);persist(K.desloc,next);setNotice('Deslocação registada.');}
- function exportarJSON(){downloadText(JSON.stringify({versao:'4.0.0',limites:limite,locaisExtras:extras,gpsAtivos,pkAtivos,accessos,deslocacoes:desloc,tracado:route,osmPontos:osmPoints,assetsSnapshot},null,2),'RJP_Navigator_Linha_do_Oeste_Dados.json','application/json');}
+ function exportarJSON(){downloadText(JSON.stringify({versao:'3.5.0',limites:limite,locaisExtras:extras,gpsAtivos,pkAtivos,accessos,deslocacoes:desloc,tracado:route,osmPontos:osmPoints},null,2),'RJP_Navigator_Linha_do_Oeste_Dados.json','application/json');}
  function exportarCSV(){
   const data=[['Categoria','Designação','PK','Latitude','Longitude','Origem GPS','Observações'],...assets.map(a=>[a.categoria,a.titulo,a.pk||'',isPositioned(a)?Number(a.lat).toFixed(7):'',isPositioned(a)?Number(a.lng).toFixed(7):'',a.gpsStatus||'',a.gpsNote||a.observacoes||''])];
   const csv='\uFEFF'+data.map(line=>line.map(cell=>'"'+String(cell??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
@@ -218,7 +207,7 @@ function App(){
  async function importarBackup(file){if(!file)return;try{const payload=JSON.parse(await file.text());if(!confirm('A importação substitui os teus registos locais atuais. Continua?'))return;
   for(const [key,state,fn,v] of [[K.extras,payload.locaisExtras,setExtras,[]],[K.gps,payload.gpsAtivos,setGpsAtivos,{}],[K.pk,payload.pkAtivos,setPkAtivos,{}],[K.access,payload.accessos,setAccessos,{}],[K.desloc,payload.deslocacoes,setDesloc,[]],[K.route,payload.tracado,setRoute,null],[K.osm,payload.osmPontos,setOsmPoints,[]]]){
    const val=state??v;persist(key,val);fn(val);
-  }if(isValidCachedAssets(payload.assetsSnapshot)){setAssetsSnapshot(payload.assetsSnapshot);persist(ASSETS_CACHE_KEY,payload.assetsSnapshot);}setNotice('Cópia JSON importada.');}catch(e){alert('JSON de backup inválido: '+e.message);}finally{if(jsonRef.current)jsonRef.current.value='';}}
+  }setNotice('Cópia JSON importada.');}catch(e){alert('JSON de backup inválido: '+e.message);}finally{if(jsonRef.current)jsonRef.current.value='';}}
  async function importarTracado(file){if(!file)return;try{const obj=JSON.parse(await file.text());const raw=parseRouteGeoJSON(obj);const geo=orientAndValidateRoute(raw,[REF_START.lat,REF_START.lng],[REF_END.lat,REF_END.lng]);
   const output={...geo,sourceFile:file.name,importedAt:new Date().toISOString()};if(!persist(K.route,output))return;setRoute(output);
   setNotice(`Traçado importado (${geo.coords.length} vértices / ${(geo.length/1000).toFixed(1)} km). Coordenadas de PK estimadas, ainda sem calibração intermédia.`);
@@ -226,34 +215,24 @@ function App(){
  async function atualizarCartografia(silent=false,preferredRoute=null,needAssets=true){
   if(loadingOSM)return;
   setLoadingOSM(true);setOsmError('');
-  if(!silent)setNotice('A procurar o traçado ferroviário na API OSM. Se falhar, será tentado o Overpass.');
+  if(!silent)setNotice('A descarregar a linha ferroviária real e os pontos OSM. Pode demorar até alguns minutos.');
   try{
    let activeRoute=preferredRoute||route;
-   let points=[...osmPoints];
    if(!activeRoute){
-    const response=await getRailwayFromOSM({start:[REF_START.lat,REF_START.lng],end:[REF_END.lat,REF_END.lng],overpassFetch:()=>fetchOverpass(REL_QUERY)});
-    activeRoute=response.route;
+    const res=await fetchOverpass(REL_QUERY);
+    activeRoute=createRouteFromOSM(res.elements,[REF_START.lat,REF_START.lng],[REF_END.lat,REF_END.lng]);
     if(!persist(K.route,activeRoute))throw Error('Sem espaço para guardar traçado.');
     setRoute(activeRoute);
-    setPreloadStatus(`PK ligados ao eixo OSM (${activeRoute.coords.length} vértices) — estimativas por validar`);
-    if(response.osmPoints.length){
-     const map=new Map([...points,...response.osmPoints].map(p=>[p.id,p]));
-     points=[...map.values()];persist(K.osm,points);setOsmPoints(points);
-    }
    }
-   // Os PK devem ficar imediatamente disponíveis, mesmo que a consulta de PN/estações falhe.
-   if(needAssets&&points.length<50){
-    try{
-     const pointsRes=await fetchOverpass(ASSET_QUERY);
-     const updated=parseOSMAssets(pointsRes.elements);
-     const combined=new Map([...points,...updated].map(p=>[p.id,p]));
-     points=[...combined.values()];
-     if(points.length){persist(K.osm,points);setOsmPoints(points);}
-    }catch(e){setNotice(`Eixo dos PK carregado. Algumas PN/estações não foram obtidas: ${e.message}`);}
+   let points=needAssets ? null : osmPoints;
+   if(needAssets){
+    const pointsRes=await fetchOverpass(ASSET_QUERY);
+    points=parseOSMAssets(pointsRes.elements);
+    if(points.length){persist(K.osm,points);setOsmPoints(points);}
    }
-   setPreloadStatus(`Traçado carregado: ${activeRoute.coords.length} vértices · PK aproximados disponíveis`);
-   if(!silent)setNotice(`Traçado da Linha do Oeste disponível. PK estimados ao longo do eixo; ${points.length} pontos cartográficos associados.`);
-  }catch(e){setOsmError(e.message);setPreloadStatus('Sem eixo da linha: PK intermédios ainda sem coordenadas.');setNotice(`Cartografia indisponível: ${e.message}`);}
+   setPreloadStatus('Traçado carregado e guardado neste dispositivo');
+   setNotice(`Cartografia carregada: ${(activeRoute.length/1000).toFixed(1)} km de geometria e ${points?.length||0} elementos OSM. Coordenadas PK aproximadas.`);
+  }catch(e){setOsmError(e.message);setNotice(`Não foi possível atualizar cartografia: ${e.message}`);}
   finally{setLoadingOSM(false);}
  }
  // Primeiro arranque: carregar o traçado que veio na APK/WebApp, antes de consultar a internet.
@@ -263,23 +242,18 @@ function App(){
    let installedRoute=route,installedAssets=osmPoints;
    const data=await fetchBundledCartography(`${import.meta.env.BASE_URL}data/linha-oeste-preload.json`);
    if(cancelled)return;
-   // Fonte IP integrada prevalece sobre caches OSM antigos, mas não substitui traçados importados pelo utilizador.
-   const cachedSource=String(installedRoute?.source||'');
-   const cachedName=String(installedRoute?.sourceFile||'');
-   const replaceOld=!installedRoute||cachedSource.startsWith('osm')||cachedName.includes('OpenStreetMap');
-   if(data?.route&&replaceOld){installedRoute=data.route;setRoute(installedRoute);persist(K.route,installedRoute);}
+   if(data?.route&&!installedRoute){installedRoute=data.route;setRoute(installedRoute);persist(K.route,installedRoute);}
    if(data?.osmPoints?.length&&!installedAssets.length){installedAssets=data.osmPoints;setOsmPoints(installedAssets);persist(K.osm,installedAssets);}
    if(installedRoute){
-    setPreloadStatus(installedRoute.source==='ip-shapefile'?'Linha do Oeste integrada na APK — fonte IP':'Traçado personalizado ou guardado no dispositivo');
+    setPreloadStatus(data?.route?'Mapa da linha incluído na aplicação':'Traçado guardado no dispositivo');
    }else setPreloadStatus('A descarregar o traçado automaticamente (necessita de internet)');
-   if(!installedRoute){
+   if(!installedRoute||!installedAssets.length){
     if(navigator.onLine===false){setOsmError('Sem ligação: mapa ferroviário online e traçado detalhado dependem de internet no primeiro carregamento.');return;}
     await atualizarCartografia(true,installedRoute,!installedAssets.length);
    }
   }
   iniciarMapa().catch(e=>{if(!cancelled)setOsmError(e.message);});return()=>{cancelled=true;};
  },[]);
- useEffect(()=>{let active=true;fetch(`${import.meta.env.BASE_URL}data/rede-ferroviaria-nacional.json`).then(r=>{if(!r.ok)throw Error('Rede nacional indisponível');return r.json();}).then(o=>{if(active&&Array.isArray(o.linhas))setRedeNacional(o);}).catch(e=>{if(active)console.warn(e.message);});return()=>{active=false;};},[]);
  function exportarKML(){downloadText(makeKML(route,assets),'RJP_Navigator_Linha_Oeste_Google_My_Maps.kml','application/vnd.google-earth.kml+xml');}
  function procurarPK(){const val=parsePK(pkBusca);if(val===null||val<PK_START||val>PK_END){alert('PK fora do troço (21+191 a 191+191).');return;}setConsulta(val);setRoadResult(null);setRoadError('');setRoadChoice('');changeTab('mapa');}
  const confirmMatch=consulta!==null?assets.find(a=>parsePK(a.pk)===consulta&&(a.gpsStatus==='Confirmado no terreno'||a.key==='ref-inicial'||a.key==='ref-final')):null;
@@ -306,25 +280,15 @@ function App(){
 
  const selectedOnMap=consulta!==null&&consultPoint?{...consultPoint,key:`pk-consulta-${consulta}`,titulo:`PK ${formatPK(consulta)}`}:selKey&&isPositioned(current)?current:null;
  return <div className="app">
-  <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V4.0</span></h1><p>Rede Ferroviária Nacional · pesquisa de PK por linha e acessos rodoviários</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
-  <nav>{[['inicio','Início'],['locais','Locais'],['pn','Passagens de nível'],['km','PK/Km'],['mapa','Linha do Oeste'],['rede','Rede nacional / PK'],['ativos','Ativos ferroviários'],['novo','Novo local'],['desloc','Deslocações']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>changeTab(k)}>{t}</button>)}</nav>
+  <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V4.0</span></h1><p>Rede Ferroviária Nacional · Linha do Oeste em destaque</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
+  <nav>{[['inicio','Início'],['nacional','Rede Nacional'],['locais','Locais'],['pn','Passagens de nível'],['km','PK/Km'],['mapa','Linha do Oeste'],['novo','Novo local'],['desloc','Deslocações']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>changeTab(k)}>{t}</button>)}</nav>
   {notice&&<div className="notice" role="status">{notice}<button title="Fechar" onClick={()=>setNotice('')}>×</button></div>}
-  <section className="quicksearch"><div><b>Localizar um quilómetro da Linha do Oeste</b><small>Ex.: 115+350 · outras linhas em «Rede nacional / PK»</small></div><input aria-label="PK a localizar" value={pkBusca} onChange={e=>setPkBusca(e.target.value)} onKeyDown={e=>e.key==='Enter'&&procurarPK()}/><button onClick={procurarPK}>Localizar PK</button></section>
-  {['pn','inicio','ativos'].includes(tab)&&<section className="card pn-sync-panel" aria-label="Sincronização centralizada de ativos">
-    <div className="pn-sync-heading"><div><h2>Inventário ferroviário · atualização automática</h2><p><strong>{ativosCentrais.length} ativos</strong> na base disponível · {pnList.length} PN da Linha do Oeste · {assetsSnapshot?'Última cópia sincronizada offline':'Cópia local incluída'}{assetsSnapshot?.updatedAt?` · ${new Date(assetsSnapshot.updatedAt).toLocaleString('pt-PT')}`:''}</p></div>
-    <button type="button" disabled={assetsSyncLoading} onClick={()=>atualizarAtivos(false)}>{assetsSyncLoading?'A sincronizar…':'Sincronizar agora'}</button></div>
-    <p className="footnote">Uma única tabela Google Sheets (PN, PH, PS, PI, ATR, VAL, GEO, OA e outros). Todos os dispositivos usam a mesma configuração; sincronizam ao abrir e de 15 em 15 minutos enquanto a app estiver ativa.</p>
-    <p className="pn-sync-info"><strong>Ligação central:</strong> {assetsConfig?.enabled?'Ativa':'A aguardar ativação única do Apps Script'} · <a href="https://docs.google.com/spreadsheets/d/1JBRHtWuFx-wMsCGimf28LhVVOjrL5mIX5Z_NGiJa0Dw/edit" target="_blank" rel="noreferrer">Abrir tabela única no Google Drive</a> · <a href="https://ruijpedro.github.io/RJP-Navigator/config/ativos-sync.json" target="_blank" rel="noreferrer">Configuração partilhada</a></p>
-    {assetsSyncStatus.message&&<p role="status" className={assetsSyncStatus.kind==='error'?'warning':'pn-sync-info'}>{assetsSyncStatus.message}</p>}
-    {!assetsConfig?.enabled&&<p className="footnote">A nova sincronização ainda precisa de ser ativada uma vez no GitHub (ficheiro <code>public/config/ativos-sync.json</code>). Até lá, mantêm-se as 103 PN incluídas.</p>}
-   </section>}
-  {['rede','ativos'].includes(tab)&&<main className="rede-nacional-container"><section className="card">
-   {redeNacional?<NationalNavigator network={redeNacional} selectedLine={linhaSelecionada} onLineChange={setLinhaSelecionada} gps={gps} onGetGPS={obterGPS} centralAssets={ativosCentrais} showInventory={tab==='ativos'}/>:<p>A carregar a cartografia ferroviária nacional…</p>}
-  </section></main>}
+  {tab!=='nacional'&&<section className="quicksearch"><div><b>Localizar um quilómetro</b><small>Introduz um PK ou toca no eixo ferroviário para identificar PK, GPS e área geográfica</small></div><input aria-label="PK a localizar" value={pkBusca} onChange={e=>setPkBusca(e.target.value)} onKeyDown={e=>e.key==='Enter'&&procurarPK()}/><button onClick={procurarPK}>Localizar PK</button></section>}
+  {tab==='nacional'&&<NationalNavigator oesteRoute={route} obterGPS={obterGPS}/>}
   {tab==='inicio'&&<main className="grid dashboard">
-   <section className="card hero"><h2>O teu troço da Linha do Oeste</h2><p>Do PK <strong>21+191 (Belas / Sintra)</strong> ao PK <strong>191+191 (Carriço / Pombal)</strong>, com 170 km de referência.</p><p>O traçado ferroviário pode ser realçado no mapa. A geolocalização de cada PK exige geometria ferroviária georreferenciada e calibração.</p><div className="stats">{[[String(pnList.length),'Passagens de nível (lista atualizada)'],['38','Estações / apeadeiros'],[String(countConfirmed),'GPS confirmados em campo'],[String(countEstimated),'Coordenadas por cartografia/estimativa'],[String(osmMatched),'Ativos associados ao OSM'],[route?'Disponível':'Pendente','Traçado georreferenciado']].map(([n,lab])=><div key={lab}><b>{n}</b><span>{lab}</span></div>)}</div></section>
+   <section className="card hero"><h2>O teu troço da Linha do Oeste</h2><p>Do PK <strong>21+191 (Belas / Sintra)</strong> ao PK <strong>191+191 (Carriço / Pombal)</strong>, com 170 km de referência.</p><p>O traçado ferroviário pode ser realçado no mapa. A geolocalização de cada PK exige geometria ferroviária georreferenciada e calibração.</p><div className="stats">{[['59','Passagens de nível'],['38','Estações / apeadeiros'],[String(countConfirmed),'GPS confirmados em campo'],[String(countEstimated),'Coordenadas por cartografia/estimativa'],[String(osmMatched),'Ativos associados ao OSM'],[route?'Disponível':'Pendente','Traçado georreferenciado']].map(([n,lab])=><div key={lab}><b>{n}</b><span>{lab}</span></div>)}</div></section>
    <section className="card"><h3>GPS atual</h3><p>{gps?`${gps.lat}, ${gps.lng} (±${gps.acc} m)`:'Ainda sem posição GPS do dispositivo.'}</p><button onClick={obterGPS}>Atualizar GPS</button><p className="footnote">O GPS guardado sobrepõe-se às estimativas e é conservado entre atualizações, desde que os dados locais da app sejam mantidos.</p></section>
-   <section className="card"><h3>Ações rápidas</h3><div className="stack"><button onClick={()=>changeTab('mapa')}>Ver mapa e traçado</button><button disabled={loadingOSM} onClick={()=>atualizarCartografia()}>{loadingOSM?'A atualizar...':'Atualizar cartografia OSM'}</button><button onClick={()=>changeTab('pn')}>Ver {pnList.length} PN</button><button onClick={exportarKML}>Exportar para Google My Maps</button><button onClick={exportarCSV}>Exportar coordenadas CSV</button><button onClick={exportarJSON}>Guardar cópia JSON</button></div></section>
+   <section className="card"><h3>Ações rápidas</h3><div className="stack"><button onClick={()=>changeTab('mapa')}>Ver mapa e traçado</button><button disabled={loadingOSM} onClick={()=>atualizarCartografia()}>{loadingOSM?'A atualizar...':'Atualizar cartografia OSM'}</button><button onClick={()=>changeTab('pn')}>Ver 59 PN</button><button onClick={exportarKML}>Exportar para Google My Maps</button><button onClick={exportarCSV}>Exportar coordenadas CSV</button><button onClick={exportarJSON}>Guardar cópia JSON</button></div></section>
   </main>}
   {['locais','pn','km','mapa'].includes(tab)&&<main className={tab==='mapa'?'map-layout':'layout'}>
    <aside className="card list"><div className="filters"><input aria-label="Pesquisar locais" placeholder="Pesquisar por PK, nome, concelho..." value={q} onChange={e=>setQ(e.target.value)}/>
@@ -334,9 +298,21 @@ function App(){
    </aside>
    <section className="right-col">
     {tab==='mapa'&&<section className="card map-card"><div className="map-head"><div><h2>Mapa da Linha do Oeste</h2><p>PK 21+191 — 191+191 · carregamento automático, sem importar ficheiros</p><p className="map-preload-status">{preloadStatus}{loadingOSM?' · a atualizar dados...':''}</p></div><a href={railMap(isPositioned(current)?current:REF_START)} target="_blank" rel="noreferrer" className="secondary-action">Mapa ferroviário externo ↗</a></div>
-      <Mapa assets={assets} route={route} selected={selectedOnMap} onSelect={setSelection} roadAccess={chosenRoad} railTarget={consulta!==null?consultPoint:null}/>
+      <Mapa assets={assets} route={route} selected={selectedOnMap} onSelect={setSelection} onTrackPick={onTrackPick} identifiedPoint={identified} roadAccess={chosenRoad} railTarget={consulta!==null?consultPoint:null}/>
+      {identified&&<div className="identify-box" aria-live="polite">
+       <div className="identify-heading"><h3>Ponto identificado na Linha do Oeste</h3><button type="button" className="identify-close" onClick={()=>{setIdentified(null);setAdmin(null);}}>Fechar ×</button></div>
+       <strong className="identify-pk">PK {identified.pkLabel}</strong>
+       <dl><dt>Coordenadas (WGS84)</dt><dd>{identified.lat.toFixed(7)}, {identified.lng.toFixed(7)}</dd>
+        <dt>Freguesia</dt><dd>{admin?.freguesia|| (adminLoading?'A consultar…':'Não disponível')}</dd>
+        <dt>Concelho</dt><dd>{admin?.concelho|| (adminLoading?'A consultar…':'Não disponível')}</dd>
+        <dt>Distrito</dt><dd>{admin?.distrito|| (adminLoading?'A consultar…':'Não disponível')}</dd>
+        <dt>Localidade</dt><dd>{admin?.localidade|| (adminLoading?'A consultar…':'Não disponível')}</dd></dl>
+       {adminError&&<p className="warning">{adminError} Podes continuar a usar o PK e o GPS.</p>}
+       <p className="footnote">O PK é <b>estimado ao longo do eixo cartografado</b>, calibrado pelas referências disponíveis, e não certificado pela IP. Os dados administrativos vêm do OpenStreetMap/Nominatim e precisam de internet na primeira consulta.</p>
+       <div className="actions"><button onClick={()=>{setPkBusca(identified.pkLabel);setConsulta(identified.pk);setRoadResult(null);setRoadError('');}}>Encontrar acesso rodoviário</button><a href={pointMaps(identified)} target="_blank" rel="noreferrer">Abrir no Google Maps</a><a href={railMap(identified)} target="_blank" rel="noreferrer">Ver mapa ferroviário</a></div>
+      </div>}
       {consulta!==null&&<div className="result-box"><h3>PK {formatPK(consulta)} — estrada mais próxima</h3><p>{pkSearchStatus}</p>
-       {consultPoint?<p><b>Ponto ferroviário:</b> {Number(consultPoint.lat).toFixed(7)}, {Number(consultPoint.lng).toFixed(7)} <a href={pointMaps(consultPoint)} target="_blank" rel="noreferrer">Ver eixo no Google Maps</a></p>:<p>Sem coordenada para este PK. O mapa de fundo pode aparecer mesmo que a geometria ferroviária ainda não tenha carregado. Tenta «Tentar carregar o eixo OSM».</p>}
+       {consultPoint?<p><b>Ponto ferroviário:</b> {Number(consultPoint.lat).toFixed(7)}, {Number(consultPoint.lng).toFixed(7)} <a href={pointMaps(consultPoint)} target="_blank" rel="noreferrer">Ver eixo no Google Maps</a></p>:<p>A obter coordenada ferroviária. Sem eixo válido não inventamos coordenadas.</p>}
        {confirmedAccess&&<div className="road-confirmed"><strong>Acesso validado por ti para este PK</strong><p>{coord(confirmedAccess)} · {confirmedAccess.nota||'Sem notas'}</p><a href={routeMaps(confirmedAccess)} target="_blank" rel="noreferrer">Navegar para acesso validado</a></div>}
        {consultPoint&&<div className="road-result"><h3>Acesso rodoviário sugerido</h3>
         {accessLoading?<p>A procurar a estrada mais próxima e os tempos de condução...</p>:null}
@@ -358,12 +334,12 @@ function App(){
        <button onClick={exportarKML}>Exportar KML</button><button onClick={exportarCSV}>Exportar CSV com PN/EDF</button><a href="https://www.google.com/mymaps" target="_blank" rel="noreferrer">Abrir Google My Maps ↗</a>
        {route&&<button className="danger-secondary" onClick={()=>{if(confirm('Apagar o traçado importado? Os GPS guardados permanecerão intactos.')){persist(K.route,null);setRoute(null);}}}>Remover traçado</button>}
       </div><p className="footnote">Para ver <b>a linha e os pontos no Google Maps</b>, exporta o ficheiro KML e importa-o no Google My Maps. A aplicação Google Maps comum não aceita uma linha personalizada através de um simples link.</p>
-      {osmError&&<div className="warning" role="alert"><b>Os PK ainda não têm coordenadas.</b> {osmError}<div className="actions"><button disabled={loadingOSM} onClick={()=>atualizarCartografia(false)}>{loadingOSM?'A tentar novamente...':'Tentar carregar o eixo OSM'}</button></div><p>O mapa de fundo não equivale ao eixo georreferenciado. Não será indicada uma estrada de acesso sem a localização ferroviária.</p></div>}
+      {osmError&&<p className="warning">Erro de cartografia: {osmError}. Também podes importar um GeoJSON manualmente.</p>}
       <p className="footnote">Para confirmação topográfica, consultar a Infraestruturas de Portugal / dados.gov.pt (Rede Ferroviária Nacional), convertida para GeoJSON WGS84 e limitada ao teu troço. A importação requer uma LineString contínua no sentido de um dos extremos; dados projetados EPSG:3763 devem ser convertidos antes.</p>
      </section>}
     {current&&<section className="card detail"><div className="detail-title"><div><h2>{current.titulo}</h2><span className="pill">{current.categoria}</span></div><span className={`status ${current.gpsStatus==='Confirmado no terreno'?'confirmed':current.gpsStatus==='Estimado pelo traçado'?'estimated':''}`}>{current.gpsStatus}</span></div>
      <dl><dt>PK ferroviário</dt><dd>{current.pk||'Por definir'}</dd><dt>Localidade</dt><dd>{current.localidade||current.nome||'—'}</dd><dt>Concelho</dt><dd>{current.concelho||'—'}</dd><dt>Freguesia</dt><dd>{current.freguesia||'—'}</dd><dt>GPS ferroviário</dt><dd>{isPositioned(current)?`${Number(current.lat).toFixed(7)}, ${Number(current.lng).toFixed(7)}`:'Sem coordenadas verificadas'}</dd><dt>Fiabilidade</dt><dd>{current.gpsStatus}{current.gpsNote?` · ${current.gpsNote}`:''}</dd></dl>
-     <p className="footnote">{current.observacoes}</p><div className="actions"><button onClick={obterGPS}>Atualizar GPS</button><button onClick={()=>guardarGPS(current)}>Guardar GPS no ativo</button><button onClick={()=>registarDeslocacao(current)}>Registar deslocação</button>{parsePK(current.pk)!=null&&parsePK(current.pk)>=PK_START&&parsePK(current.pk)<=PK_END&&<button onClick={()=>{setPkBusca(current.pk);setConsulta(parsePK(current.pk));changeTab('mapa');}}>Procurar estrada para este PK</button>}{current.categoria==='Passagem de Nível'&&parsePK(current.pk)>PK_END&&<p className="footnote">Este PK está fora do troço calibrado (21+191 a 191+191). Para localizar com rigor, precisamos de referências PK/GPS adicionais nesta zona.</p>}{isPositioned(current)&&<a target="_blank" rel="noreferrer" href={pointMaps(current)}>Ver ponto no Google Maps</a>}{isPositioned(current)&&<a target="_blank" rel="noreferrer" href={railMap(current)}>Ver ferrovia no mapa</a>}</div>
+     <p className="footnote">{current.observacoes}</p><div className="actions"><button onClick={obterGPS}>Atualizar GPS</button><button onClick={()=>guardarGPS(current)}>Guardar GPS no ativo</button><button onClick={()=>registarDeslocacao(current)}>Registar deslocação</button>{parsePK(current.pk)!=null&&<button onClick={()=>{setPkBusca(current.pk);setConsulta(parsePK(current.pk));changeTab('mapa');}}>Procurar estrada para este PK</button>}{isPositioned(current)&&<a target="_blank" rel="noreferrer" href={pointMaps(current)}>Ver ponto no Google Maps</a>}{isPositioned(current)&&<a target="_blank" rel="noreferrer" href={railMap(current)}>Ver ferrovia no mapa</a>}</div>
      <div className="edit-line"><h3>Corrigir coordenadas manualmente</h3><p className="footnote">Podes introduzir coordenadas GPS de uma carta/levantamento. São guardadas separadamente das estimativas OSM e ficam por validar até confirmação no terreno.</p><div className="inline-fields"><input aria-label="Latitude do ativo" placeholder="Latitude (ex.: 39.123456)" value={manualEdit.lat} onChange={e=>setManualEdit({...manualEdit,lat:e.target.value})}/><input aria-label="Longitude do ativo" placeholder="Longitude (ex.: -9.123456)" value={manualEdit.lng} onChange={e=>setManualEdit({...manualEdit,lng:e.target.value})}/></div><button onClick={()=>guardarGPSManual(current)}>Guardar coordenada</button></div>
      {current.categoria!=='Passagem de Nível'&&<div className="edit-line"><h3>Corrigir PK de estação / edifício</h3><div className="inline-fields"><input aria-label="Corrigir PK" placeholder="Ex.: 115+350" value={pkEdit} onChange={e=>setPkEdit(e.target.value)}/><button onClick={()=>guardarPK(current)}>Guardar PK</button></div><p className="footnote">Estações sem PK não recebem coordenadas estimadas até se introduzir uma referência quilométrica fiável.</p></div>}
      <div className="edit-line"><h3>Acesso rodoviário validado</h3>{access&&<p className="ok">Acesso registado: {coord(access)} · {access.nota||'sem observações'}</p>}
@@ -377,17 +353,8 @@ function App(){
   {tab==='desloc'&&<main className="card records"><h2>Deslocações e cópia de dados</h2><div className="actions"><button onClick={exportarJSON}>Exportar JSON</button><label className="file-action">Importar cópia JSON<input ref={jsonRef} type="file" accept="application/json,.json" onChange={e=>importarBackup(e.target.files?.[0])}/></label></div>
    {desloc.length===0?<p>Sem deslocações registadas.</p>:<div className="table-scroll"><table><thead><tr><th>Data</th><th>Hora</th><th>Destino</th><th>PK</th><th>GPS</th></tr></thead><tbody>{desloc.map(d=><tr key={d.id}><td>{d.data}</td><td>{d.hora}</td><td>{d.destino}</td><td>{d.pk}</td><td>{d.gps}</td></tr>)}</tbody></table></div>}
    <p className="footnote">Exporta um JSON antes de desinstalar ou limpar os dados da app. As coordenadas de campo, PK corrigidos e acessos são guardados localmente no dispositivo.</p></main>}
-  <footer>RJP Navigator V3.12 · Rede Ferroviária Nacional · Linha do Oeste PK 21+191 a 191+191 · Cartografia IP integrada: coordenadas PK estimadas, validar no terreno · Não substitui os procedimentos de segurança ferroviária.</footer>
+  <footer>RJP Navigator V4.0 · Rede Ferroviária Nacional · Linha do Oeste · PK 21+191 a 191+191 · Cartografia OSM: coordenadas por PK aproximadas, validar no terreno · Não substitui os procedimentos de segurança ferroviária.</footer>
  </div>;
 }
 
 createRoot(document.getElementById('root')).render(<App/>);
-
-// WebApp instalável: apenas assets do próprio domínio são guardados em cache.
-if ('serviceWorker' in navigator && (window.isSecureContext || location.hostname === 'localhost')) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {scope: import.meta.env.BASE_URL})
-      .catch(error => console.warn('RJP Navigator: PWA não ativada:', error));
-  });
-}
-

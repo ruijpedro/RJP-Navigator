@@ -1,34 +1,64 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import {geometryProfile,defaultCalibration,locateNationalPK,locateGeometricDistance,nearestOnProfile,calibrationReferences} from '../src/lib/national.js';
-const national=JSON.parse(readFileSync(new URL('../public/data/rede-ferroviaria-nacional.json',import.meta.url)));
-const geo=(line,index=0)=>geometryProfile(national.linhas.find(l=>l.nome===line).segmentos[index].coords);
-test('geometrias IP em 43 linhas utilizáveis',()=>assert.equal(national.linhas.length,43));
-for(const [name,pk] of [['Linha do Norte','150+000'],['Linha do Minho','080+100'],['Linha de Cascais','12+000'],['Linha do Oeste','115+350'],['Linha de Cintura','5+000']]){
- test(`${name}: localização PK com referências explicitadas`,()=>{
-  const idx=name==='Linha de Cintura'?1:0;const profile=geo(name,idx),location=locateNationalPK(pk,profile,defaultCalibration(name,idx));
-  assert.ok(location.lat>36&&location.lat<43&&location.lng<0,JSON.stringify(location));
-  const near=nearestOnProfile(profile,location);assert.ok(near.offsetMeters<5);
-  assert.match(location.status,/Estimado/);
- });
-}
-test('sem referências não inventa PK e oferece km geométrico',()=>{
- const p=geo('Linha do Douro');const c=defaultCalibration('Linha do Douro',0);
- assert.match(locateNationalPK('100+000',p,c).error,/duas referências/);
- assert.ok(locateGeometricDistance(12345,p).lat>0);
+import {
+ RAIL_LINES,parseAnchorCSV,lineFromGeoJSON,makeRoute,calibrateReferences,
+ pointForPK,pkForPoint,nearestOnLine,relationSearchQuery,relationWaysQuery,waysToSegments,pathBetweenAnchors
+} from '../src/lib/national.js';
+const line=makeRoute([[39,-9],[39.01,-9],[39.02,-9]],'Teste');
+const refs=[{pk:1000,lat:39,lng:-9,verified:true},{pk:3000,lat:39.02,lng:-9,verified:true}];
+test('catalogue national includes Oeste and Norte separately',()=>{
+ assert.ok(RAIL_LINES.some(x=>x.id==='oeste'));
+ assert.ok(RAIL_LINES.some(x=>x.id==='norte'));
+ assert.notEqual(RAIL_LINES.find(x=>x.id==='oeste'),RAIL_LINES.find(x=>x.id==='norte'));
 });
-test('duas referências GPS personalizadas calibram troço',()=>{
- const p=geo('Linha de Sintra');let c={anchors:[{pk:'12+000',lat:p.coords[100][0],lng:p.coords[100][1]},{pk:'22+000',lat:p.coords[500][0],lng:p.coords[500][1]}]};
- const result=locateNationalPK('17+000',p,c);assert.ok(result.lat>0,JSON.stringify(result));
+test('no calibration with one reference',()=>{
+ const c=calibrateReferences(line,[refs[0]]);assert.equal(c.ready,false);assert.equal(pointForPK(1500,c),null);
 });
-test('rejeita GPS muito longe do eixo e referência invertida',()=>{
- const p=geo('Linha de Cascais');
- assert.match(calibrationReferences(p,{anchors:[{pk:'1+000',lat:42,lng:-7}]}).error,/>200 m/);
- assert.match(calibrationReferences(p,{anchors:[{pk:'1+000',position:'start'},{pk:'3+000',position:'end'},{pk:'4+000',lat:p.coords[200][0],lng:p.coords[200][1]}]}).error,/monotónicas/);
+test('interpolate PK between two distinct railway anchors',()=>{
+ const c=calibrateReferences(line,refs);assert.equal(c.ready,true);
+ const p=pointForPK('2+000',c);assert.ok(Math.abs(p.lat-39.01)<0.00001);assert.equal(p.status,'Interpolado entre referências');
+ const reversed=pkForPoint({lat:39.015,lng:-9},c);assert.equal(reversed.pk,2500);
 });
-test('PK fora dos limites não extrapola',()=>{
- const p=geo('Linha do Norte');assert.match(locateNationalPK('500+000',p,defaultCalibration('Linha do Norte',0)).error,/fora do intervalo/);
+test('do not extrapolate beyond verified anchor range',()=>{
+ const c=calibrateReferences(line,refs);assert.equal(pointForPK('0+999',c),null);assert.equal(pointForPK('3+001',c),null);
+ assert.equal(pkForPoint({lat:39.021,lng:-9},c),null);
 });
-
-test('Linha do Minho São Bento–Campanhã tem PK decrescentes',()=>{const p=geo('Linha do Minho',1),a=locateNationalPK('1+000',p,defaultCalibration('Linha do Minho',1));assert.ok(a.lat>40,JSON.stringify(a));});
+test('respect reversing a line geometry',()=>{
+ const reversed=makeRoute([...line.coords].reverse());const c=calibrateReferences(reversed,refs);
+ assert.equal(c.ready,true);assert.ok(Math.abs(pointForPK(2000,c).lat-39.01)<1e-6);
+});
+test('reject inconsistent calibrated points due to kilometre reset or wrong line',()=>{
+ const c=calibrateReferences(line,[...refs,{pk:2000,lat:39.019,lng:-9}]);
+ assert.equal(c.ready,false);assert.match(c.reason,/incompatíveis/);
+});
+test('anchor too far from geometry is not silently snapped',()=>{
+ const c=calibrateReferences(line,[refs[0],{pk:3000,lat:40,lng:-8}]);assert.equal(c.ready,false);
+});
+test('national anchor importer can import multiple distinct lines',()=>{
+ const input='linha;pk;latitude;longitude\nLinha do Oeste;21+191;38.7975269;-9.3131841\nLinha do Norte;114+500;39.12345;-8.65432\n';
+ const o=parseAnchorCSV(input);assert.equal(o.anchors.length,2);
+ assert.equal(o.anchors[0].lineId,'oeste');assert.equal(o.anchors[1].lineId,'norte');
+ assert.equal(o.anchors[0].verified,false);
+});
+test('reject malformed GPS, preserve useful imported lines and count rejected',()=>{
+ const o=parseAnchorCSV('linha;pk;latitude;longitude\nLinha do Norte;9+002;39.45;-8.5\nLinha do Norte;9+003;0;0');
+ assert.equal(o.anchors.length,1);assert.deepEqual(o.errors,[3]);
+});
+test('accept WGS84 single line, reject ambiguous multilines and projected coordinates',()=>{
+ const data={type:'LineString',coordinates:[[-9,39],[-9,39.01]]};
+ const route=lineFromGeoJSON(data);assert.ok(route.length>1000);
+ assert.throws(()=>lineFromGeoJSON({type:'MultiLineString',coordinates:[data.coordinates,data.coordinates]}),/única LineString/);
+ assert.throws(()=>lineFromGeoJSON({type:'LineString',coordinates:[[-100000,38000],[-99900,38000]]}),/GeoJSON inválida/);
+});
+test('OSM relation query escapes names and ids safely',()=>{
+ assert.match(relationSearchQuery('Linha do Norte'),/Linha do Norte/);
+ assert.equal(relationWaysQuery(567), '[out:json][timeout:100];way(r:567);out geom;');
+ assert.throws(()=>relationWaysQuery('wrong'),/inválido/);
+});
+test('build real continuous line from connected OSM ways between anchors',()=>{
+ const ways=[{type:'way',id:1,nodes:[1,2],geometry:[{lat:39,lon:-9},{lat:39.01,lon:-9}]},{type:'way',id:2,nodes:[2,3],geometry:[{lat:39.01,lon:-9},{lat:39.02,lon:-9}]}];
+ const segments=waysToSegments(ways);assert.equal(segments.length,2);
+ const result=pathBetweenAnchors(ways,refs[0],refs[1]);assert.equal(result.coords.length,3);
+ assert.ok(result.length>2000);
+ assert.throws(()=>pathBetweenAnchors(ways,{lat:40,lng:-8},refs[1]),/afastadas/);
+});

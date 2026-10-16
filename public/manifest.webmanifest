@@ -1,7 +1,7 @@
 {
-  "name": "RJP Navigator — Rede Nacional",
+  "name": "RJP Navigator",
   "short_name": "RJP Nav",
-  "description": "Inventário e navegação de ativos ferroviários: PN, PH, PS, PI, atravessamentos, valetas, geotecnia e obras de arte.",
+  "description": "Mapa automático da Linha do Oeste: PK, PN, estações e edifícios, navegação técnica ferroviária",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",

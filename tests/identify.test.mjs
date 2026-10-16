@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {identifyRailPoint,pkAtDistance,parsePortugueseAddress,reverseAdministrative} from '../src/lib/identify.js';
+import {interpolatePK,PK_START,PK_END,metersBetween} from '../src/lib/rail.js';
+const coords=[[38.80,-9.30],[38.85,-9.25],[38.90,-9.22],[39.02,-9.13]];
+const length=coords.slice(1).reduce((s,p,i)=>s+metersBetween(coords[i],p),0);
+const route={coords,length};
+test('no fictional PK when route is missing',()=>assert.equal(identifyRailPoint({lat:38.8,lng:-9.3},null),null));
+test('tapping an endpoint returns end PK',()=>{assert.equal(identifyRailPoint({lat:38.8,lng:-9.3},route).pk,PK_START);assert.equal(identifyRailPoint({lat:39.02,lng:-9.13},route).pk,PK_END);});
+test('inverse PK agrees with forward PK interpolation without control anchors',()=>{for(const pk of [PK_START,40000,80000,120000,180000,PK_END]){const point=interpolatePK(pk,route);assert.ok(Math.abs(identifyRailPoint(point,route).pk-pk)<20);}});
+test('inverse PK agrees with field control anchor',()=>{const anchors=[{pk:90000,along:length*.38}];for(const pk of [PK_START,60000,90000,130000,PK_END]){const point=interpolatePK(pk,route,anchors);assert.ok(Math.abs(identifyRailPoint(point,route,anchors).pk-pk)<20);}});
+test('click snaps to line rather than labeling a random point',()=>{const p=identifyRailPoint({lat:38.8,lng:-9.31},route);assert.ok(p.distance>100);assert.ok(p.distance<1100)});
+test('correct Portuguese admin labels without guessing freguesia from suburb',()=>{const x=parsePortugueseAddress({address:{parish:'Carriço',municipality:'Pombal',state_district:'Leiria',village:'Carriço'},display_name:'Teste'});assert.equal(x.freguesia,'Carriço');assert.equal(x.concelho,'Pombal');assert.equal(x.distrito,'Leiria');const y=parsePortugueseAddress({address:{suburb:'Centro',county:'Sintra'}});assert.equal(y.freguesia,'');});
+test('reverse geocoding fetch sends Portuguese language and reads address',async()=>{const result=await reverseAdministrative({lat:39.9,lng:-8.8},async(url)=>{assert.ok(url.includes('accept-language=pt-PT'));return {ok:true,json:async()=>({address:{parish:'Carriço',municipality:'Pombal',state_district:'Leiria'}})};});assert.equal(result.concelho,'Pombal');});

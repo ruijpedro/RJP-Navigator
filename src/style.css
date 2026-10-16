@@ -5,29 +5,32 @@
 /* V3.5: estrada perto do PK e navegação automóvel */
 .road-result{margin-top:14px;padding:14px;border-radius:12px;border:1px solid #b8d5c6;background:#fff}.road-result h3{margin:0 0 10px}.road-distance{display:flex;align-items:center;gap:14px;margin:9px 0;padding:12px;border-radius:10px;background:#ebf2ff}.road-distance strong{color:#125ba2;font-size:26px;white-space:nowrap}.road-distance span{font-size:12px;color:#29517a}.road-choices{margin:14px 0}.road-choices label{font-size:12px;font-weight:700;color:#355d46;display:block;margin-bottom:5px}.road-caution{font-size:12px;line-height:1.6;background:#fff4d9;color:#775213;border-left:3px solid #db9d20;padding:12px;border-radius:7px}.road-confirmed{background:#e2f4eb;padding:12px;border:1px solid #a4d7bb;border-radius:9px;margin:10px 0}.road-confirmed strong{display:block;color:#0b673d}.road-confirmed a{margin-top:4px}.road-result .warning button{margin:8px}
 
-/* V3.7 — consulta da Rede Ferroviária Nacional. */
-.rede-nacional-container{max-width:1280px;margin:14px auto;padding:0 14px}.rede-nacional-container .card{padding:18px}.rede-nacional-container .national-selector{display:block;max-width:520px;font-weight:700}.rede-nacional-container .national-selector select{display:block;margin-top:8px}.rede-nacional-container .national-map{height:60vh;min-height:400px}.rede-nacional-container .warning{margin-top:12px;color:#704000;background:#fff7e6;padding:12px;border-radius:10px}
+/* V3.6 — identificação do PK e divisões administrativas por toque no eixo */
+.identify-box{margin-top:14px;background:#f7f0ff;border:1px solid #d6baf0;border-radius:13px;padding:16px}.identify-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.identify-heading h3{margin:0}.identify-close{background:transparent;color:#673c87;border-color:#c5a8da;padding:6px 10px}.identify-pk{font-size:26px;color:#643294;display:block;margin:12px 0}.identify-box dl{grid-template-columns:minmax(100px,175px) minmax(0,1fr);margin:8px 0}.identify-box .actions a{background:#643294;border-color:#643294}
 
-/* V3.8 — Navegação PK multi-linha */
-.national-nav{min-width:0}.national-nav p{line-height:1.55}.national-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;align-items:end;margin:12px 0}.national-fields label,.national-panel label{font-size:13px;color:#2a5441;font-weight:650;display:block}.national-fields input,.national-fields select,.national-panel label>input{display:block;margin:6px 0 0;width:100%}.national-search{grid-template-columns:minmax(170px,1fr) auto;max-width:640px}.national-search button{min-height:44px}.national-geometry{grid-template-columns:minmax(200px,1fr) auto;max-width:700px}.national-choice{display:block;font-size:13px;font-weight:650}.national-message{padding:10px 12px;border-left:4px solid #167e57;border-radius:7px;background:#ebf6f0;color:#1b4934;font-size:13px}.national-panel{border:1px solid #d0e4d8;border-radius:12px;padding:16px;margin-top:16px;background:#f8fbf9}.national-panel summary{font-weight:750;color:#084e32;cursor:pointer}.national-panel h3{margin:20px 0 8px}.national-panel p{font-size:13px;margin:10px 0}.national-panel>a,.national-panel p>a{color:#08603a;background:transparent;border:0;text-decoration:underline;padding:0}.national-fields button{min-height:43px}.secondary-btn{background:#e7f1ea;color:#07563b;border:1px solid #b2d3c0}.reference-list>div,.national-poi{display:flex;justify-content:space-between;gap:15px;align-items:center;border-bottom:1px solid #d4e8dd;padding:10px 0;font-size:13px}.reference-list small{display:block;color:#678071;margin-top:3px}.reference-list button,.national-poi button{padding:6px 9px}.national-nav .road-confirmed a{color:#08603a;background:transparent;border:0;text-decoration:underline;padding:0}.national-backup{padding-top:10px;border-top:1px solid #dbe8de}.national-nav .national-map{height:min(63vh,550px);min-height:350px}.national-nav .result-box a{padding:9px 12px}.national-nav .road-result{margin-bottom:14px}.national-nav .national-poi .actions{margin:0}
-@media(max-width:650px){.national-fields,.national-search,.national-geometry{grid-template-columns:1fr}.national-nav .national-map{min-height:310px;height:390px}.reference-list>div,.national-poi{align-items:flex-start;flex-direction:column}.national-search input{width:100%}}
-
-/* V3.12 — sincronização das passagens de nível com o Google Drive */
-.pn-sync-panel{margin:14px 2vw 0;padding:14px 18px}
-.pn-sync-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.pn-sync-heading h2{margin:0 0 5px;font-size:16px}
-.pn-sync-heading p{font-size:12px;color:var(--muted);margin:0}
-.pn-sync-panel details{margin-top:9px;font-size:13px}
-.pn-sync-panel summary{font-weight:700;color:#0a6541;cursor:pointer}
-.pn-sync-fields{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.pn-sync-fields input{flex:1;min-width:260px}
-.pn-sync-info{font-size:12px;background:#eaf5ed;border-radius:8px;padding:9px 12px;color:#195d3f;margin:10px 0 0}
-@media(max-width:650px){.pn-sync-heading{align-items:flex-start;flex-direction:column}.pn-sync-fields input{min-width:100%}}
-
-/* V4.0 — tabela nacional de ativos sincronizados */
-.asset-inventory{margin:0 0 20px;background:#f8faf9}.asset-inventory h2{margin-top:0}
-.asset-filters{grid-template-columns:minmax(180px,2fr) minmax(150px,1fr) minmax(190px,1fr)}
-.asset-list{display:grid;gap:6px;max-height:370px;overflow:auto;margin:10px 0}
-.asset-row{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;padding:10px 12px;border:1px solid #d4e6dc;border-radius:9px;background:#fff;color:#144834}
-.asset-row:hover{background:#e9f4ed}.asset-row small{display:block;color:#537767;margin-top:3px}.asset-row>span:last-child{font-size:12px;color:#387552;white-space:nowrap}
-@media(max-width:700px){.asset-filters{grid-template-columns:1fr}.asset-row{flex-wrap:wrap}.asset-row>span:last-child{white-space:normal}}
+/* V4.0 — catálogo e calibração nacional */
+.national-view{padding:14px 2vw;display:flex;flex-direction:column;gap:14px}
+.national-lead{display:flex;align-items:center;gap:20px;justify-content:space-between}
+.national-lead p{line-height:1.55;margin-bottom:0;color:var(--muted)}
+.national-stats{display:flex;flex-wrap:wrap;gap:10px;flex-shrink:0}
+.national-stats span{display:grid;gap:4px;font-size:11px;background:#eef6f1;border:1px solid #d7e8de;border-radius:10px;padding:12px;text-align:center}
+.national-stats b{font-size:22px;color:#087b4b}
+.national-layout{display:grid;grid-template-columns:minmax(260px,330px) minmax(0,1fr);gap:14px;align-items:start}
+.national-side{display:grid;gap:12px;min-width:0}
+.national-side h3{margin-bottom:0}
+.national-side>p{font-size:13px;line-height:1.55;margin-bottom:0}
+.national-separator{border-top:1px solid var(--border);padding-top:14px;display:grid;gap:10px}
+.national-map-card{min-width:0}
+.national-map{height:490px;margin:12px 0}
+.national-message{display:flex;gap:12px;justify-content:space-between;margin:12px 0;background:#f3fbf5;border:1px solid #c0e2c9;padding:11px;border-radius:9px;font-size:13px}
+.national-message button{padding:0 8px;border:none;color:#216244;background:transparent;font-size:19px}
+.national-result{margin:15px 0 0;background:#f4f8fd;border:1px solid #c9ddeb;border-radius:12px;padding:15px}
+.national-result dl{grid-template-columns:170px 1fr}
+.national-data>p{line-height:1.6;color:#546f61;font-size:13px}
+.national-csv{background:#eff5f1;padding:13px;border-radius:9px;white-space:pre-wrap;word-break:break-word;font-size:12px}
+.national-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.national-check{display:flex;align-items:start;gap:10px;line-height:1.5;font-size:13px}
+.national-check input{width:auto;min-width:18px;margin-top:3px}
+.national-file{max-width:100%;width:100%}
+@media(max-width:980px){.national-layout{grid-template-columns:1fr}.national-lead{display:block}.national-stats{margin-top:14px}.national-map{height:440px}}
+@media(max-width:560px){.national-fields{grid-template-columns:1fr}.national-map{height:380px}.national-result dl{grid-template-columns:115px 1fr}.national-stats{display:grid;grid-template-columns:repeat(3,1fr)}.national-stats span{padding:7px}}

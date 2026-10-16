@@ -1,18 +1,29 @@
 /**
- * V3.7: mapa integrado a partir do Shapefile da Rede Ferroviária Nacional.
- * Não descarrega dados OSM nem depende de Overpass durante o build.
- * A cartografia vem em public/data/ e mantém a atribuição de origem.
+ * Executado no GitHub Actions ANTES do Vite build: integra a geometria verdadeira
+ * da relação OSM 2076345. Não gera uma linha artificial em caso de falha.
  */
-import {readFile} from 'node:fs/promises';
-import {verifyPreload} from '../src/lib/preload.js';
-const root=new URL('../public/data/',import.meta.url);
-const preload=JSON.parse(await readFile(new URL('linha-oeste-preload.json',root),'utf8'));
-const rede=JSON.parse(await readFile(new URL('rede-ferroviaria-nacional.json',root),'utf8'));
-const loaded=verifyPreload(preload);
-if(!loaded||!loaded.route?.coords?.length)throw Error('Mapa IP da Linha do Oeste inválido ou vazio. Não compilar APK.');
-if(loaded.route.source!=='ip-shapefile')throw Error('Mapa não proveniente do Shapefile entregue.');
-if(!Array.isArray(rede.linhas)||rede.linhas.length<40)throw Error('Base nacional ausente ou incompleta.');
-if(!rede.linhas.some(l=>l.nome==='Linha do Oeste'))throw Error('Falta a Linha do Oeste na rede nacional.');
-console.log(`Mapa integrado: ${loaded.route.coords.length} vértices · ${(loaded.route.length/1000).toFixed(2)} km · fonte IP (Shapefile local)`);
-console.log(`Rede nacional integrada: ${rede.linhas.length} designações com geometria, ${rede.linhas.reduce((n,l)=>n+l.segmentos.length,0)} segmentos.`);
-console.log('Sem pedidos HTTP. Os restantes PK exigem calibração quilométrica por linha.');
+import {writeFile,mkdir,readFile} from 'node:fs/promises';
+import {fetchOverpass,createRouteFromOSM,parseOSMAssets,REL_QUERY,ASSET_QUERY} from '../src/lib/osm.js';
+const LIMITS=JSON.parse(await readFile(new URL('../src/data/limites.json',import.meta.url),'utf8'));
+const start=LIMITS.responsibility_segment.points[0].wgs84;
+const end=LIMITS.responsibility_segment.points[1].wgs84;
+const initial=[start.latitude,start.longitude],final=[end.latitude,end.longitude];
+const out=new URL('../public/data/linha-oeste-preload.json',import.meta.url);
+const result={version:'3.4.0',generatedAt:new Date().toISOString(),source:'OpenStreetMap contributors (ODbL); relation 2076345',route:null,osmPoints:[]};
+try{
+ console.log('RJP Navigator: descarregar eixo real da Linha do Oeste (OSM 2076345)');
+ const response=await fetchOverpass(REL_QUERY);
+ result.route=createRouteFromOSM(response.elements,initial,final);
+ console.log(`Eixo: ${result.route.coords.length} vértices, ${Math.round(result.route.length/1000)} km`);
+ try{
+  const a=await fetchOverpass(ASSET_QUERY);
+  result.osmPoints=parseOSMAssets(a.elements).filter(p=>p.lat>38.5&&p.lat<40.5&&p.lng>-9.8&&p.lng<-8.4);
+  console.log(`Ativos cartografados: ${result.osmPoints.length}`);
+ }catch(e){console.warn('Não foi possível pré-carregar PN e estações: '+e.message);}
+}catch(e){
+ console.warn('Não foi possível incluir o eixo no pacote: '+e.message);
+ console.warn('A app tentará descarregá-lo automaticamente no primeiro arranque.');
+}
+await mkdir(new URL('../public/data/',import.meta.url),{recursive:true});
+await writeFile(out,JSON.stringify({...result,ready:!!result.route}));
+console.log(`Dados cartográficos guardados: ${result.route?'sim':'não (modo automático online)'}`);
