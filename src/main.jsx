@@ -16,6 +16,8 @@ import NationalNavigator from './components/NationalNavigator.jsx';
 import {loadNationalNetwork} from './lib/network-loader.js';
 import {closestRailwayGPS} from './lib/gps-nearest.js';
 import {NATIONAL_PRESETS} from './lib/national-presets-v42.js';
+import {loadPKReferences,emptyPKReferences} from './lib/pk-references.js';
+import {gpsAreaCell,describeGPSArea,formatGPSCoordinates} from './lib/gps-area.js';
 
 const REF_START={lat:limite.responsibility_segment.points[0].wgs84.latitude,lng:limite.responsibility_segment.points[0].wgs84.longitude};
 const REF_END={lat:limite.responsibility_segment.points[1].wgs84.latitude,lng:limite.responsibility_segment.points[1].wgs84.longitude};
@@ -95,6 +97,7 @@ function App(){
  const [tab,setTab]=useState('mapa'),[q,setQ]=useState(''),[tipo,setTipo]=useState('todos'),[selKey,setSelKey]=useState(''),[notice,setNotice]=useState('');
  const [loadingOSM,setLoadingOSM]=useState(false),[osmError,setOsmError]=useState(''),[preloadStatus,setPreloadStatus]=useState('A carregar mapa predefinido...');
  const [nationalNetwork,setNationalNetwork]=useState(null),[nationalError,setNationalError]=useState(''),[nationalLoading,setNationalLoading]=useState(true);
+ const [nationalPKRefs,setNationalPKRefs]=useState(emptyPKReferences),[nationalPKStatus,setNationalPKStatus]=useState('A verificar referências PK nacionais…');
  const [gpsTracking,setGpsTracking]=useState(false);
  const [nationalFocus,setNationalFocus]=useState('oeste');
  const [gps,setGps]=useState(null),[extras,setExtras]=useState(()=>read(K.extras,[])),[desloc,setDesloc]=useState(()=>read(K.desloc,[])),[gpsAtivos,setGpsAtivos]=useState(()=>read(K.gps,{})),[pkAtivos,setPkAtivos]=useState(()=>read(K.pk,{})),[accessos,setAccessos]=useState(()=>read(K.access,{})),[route,setRoute]=useState(()=>read(K.route,null)),[osmPoints,setOsmPoints]=useState(()=>read(K.osm,[]));
@@ -108,6 +111,13 @@ function App(){
    .then(data=>{if(active){setNationalNetwork(data);setNationalError('');}})
    .catch(err=>{if(active)setNationalError(`Rede nacional não carregada: ${err.message}`);})
    .finally(()=>{if(active)setNationalLoading(false);});
+  return()=>{active=false;controller.abort();};
+ },[]);
+ // As referências quilométricas são um segundo conjunto de dados, não vêm automaticamente no eixo.
+ useEffect(()=>{let active=true;const controller=new AbortController();
+  loadPKReferences(`${import.meta.env.BASE_URL}data/referencias-pk-rfn.json`,{signal:controller.signal})
+   .then(data=>{if(active){setNationalPKRefs(data);setNationalPKStatus(data.assigned>0?`${data.assigned} marcos OSM atribuídos a ${Object.keys(data.lines).length} troços; por validar`:'Sem marcos nacionais incorporados nesta compilação; usar consulta OSM por linha');}})
+   .catch(e=>{if(active)setNationalPKStatus(`Referências PK não disponíveis: ${e.message}. A cartografia ferroviária continua utilizável.`);});
   return()=>{active=false;controller.abort();};
  },[]);
  // Se o GPS já tem permissão, acompanhar a posição sem pedir autorização novamente.
@@ -133,7 +143,37 @@ function App(){
   };
   start();return()=>{active=false;if(watchId!=null){if(geolocation)geolocation.clearWatch({id:watchId}).catch(()=>{});else navigator.geolocation.clearWatch(watchId);}};
  },[gpsTracking]);
- const nearestGPS=useMemo(()=>gps&&nationalNetwork?closestRailwayGPS(gps,nationalNetwork,{presets:NATIONAL_PRESETS,customAnchors:(()=>{try{return JSON.parse(localStorage.getItem('rjp_nav_nacional_v4')||'{}').anchors||{};}catch{return {};}})()}):null,[gps?.lat,gps?.lng,gps?.acc,nationalNetwork]);
+ const nearestGPS=useMemo(()=>gps&&nationalNetwork?closestRailwayGPS(gps,nationalNetwork,{presets:NATIONAL_PRESETS,referenceSets:nationalPKRefs.lines,customAnchors:(()=>{try{return JSON.parse(localStorage.getItem('rjp_nav_nacional_v4')||'{}').anchors||{};}catch{return {};}})()}):null,[gps?.lat,gps?.lng,gps?.acc,nationalNetwork,nationalPKRefs]);
+ // Reutiliza o serviço administrativo já usado ao tocar no mapa, mas só quando
+ // o GPS muda de zona (não em cada atualização de watchPosition).
+ const [gpsArea,setGpsArea]=useState(null),[gpsAreaLoading,setGpsAreaLoading]=useState(false),[gpsAreaError,setGpsAreaError]=useState('');
+ const areaCell=gpsAreaCell(gps);
+ useEffect(()=>{
+  if(!areaCell){setGpsArea(null);setGpsAreaLoading(false);setGpsAreaError('');return;}
+  let live=true;const controller=new AbortController();
+  const cacheKey='rjp_nav_gps_admin_v423';
+  const cache=read(cacheKey,{});
+  const stored=cache[areaCell];
+  if(stored?.area&&Date.now()-stored.at<24*60*60*1000){
+   setGpsArea(stored.area);setGpsAreaLoading(false);setGpsAreaError('');return;
+  }
+  setGpsArea(null);setGpsAreaLoading(true);setGpsAreaError('');
+  const point={lat:Number(gps.lat),lng:Number(gps.lng)};
+  const timer=setTimeout(async()=>{
+   try{
+    const area=await reverseAdministrative(point,fetch,controller.signal);
+    if(!live)return;
+    setGpsArea(area);
+    // Cache local e limitado: não guarda as coordenadas completas nem as transmite a outros aparelhos.
+    const entries=Object.entries(cache).filter(([,value])=>Date.now()-value.at<24*60*60*1000).slice(-39);
+    persist(cacheKey,Object.fromEntries([...entries,[areaCell,{at:Date.now(),area}]]));
+   }catch(err){if(live&&err.name!=='AbortError')setGpsAreaError('Área administrativa indisponível; confirma a ligação à internet.');}
+   finally{if(live)setGpsAreaLoading(false);}
+  },1500);
+  return()=>{live=false;clearTimeout(timer);controller.abort();};
+ },[areaCell]);
+ const gpsPlace=describeGPSArea(gpsArea);
+
  const goToDetectedLine=()=>{if(nearestGPS?.nearest){setNationalFocus(nearestGPS.nearest.line);setTab('nacional');}};
  const [form,setForm]=useState({categoria:'Passagem de Nível',nome:'',pk:'',localidade:'',concelho:'',freguesia:'',observacoes:''});
  const importRef=useRef(null),jsonRef=useRef(null);
@@ -319,13 +359,14 @@ function App(){
 
  const selectedOnMap=consulta!==null&&consultPoint?{...consultPoint,key:`pk-consulta-${consulta}`,titulo:`PK ${formatPK(consulta)}`}:selKey&&isPositioned(current)?current:null;
  return <div className="app">
-  <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V4.0</span></h1><p>Rede Ferroviária Nacional · Linha do Oeste em destaque</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
+  <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V4.2.3</span></h1><p>Rede Ferroviária Nacional · Linha do Oeste em destaque</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
   <nav>{[['inicio','Início'],['nacional','Rede Nacional'],['locais','Locais'],['pn','Passagens de nível'],['km','PK/Km'],['mapa','Linha do Oeste'],['novo','Novo local'],['desloc','Deslocações']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>changeTab(k)}>{t}</button>)}</nav>
   {notice&&<div className="notice" role="status">{notice}<button title="Fechar" onClick={()=>setNotice('')}>×</button></div>}
   <section className="card rjp-gps-nearest" aria-label="Localização ferroviária automática por GPS">
-   <div className="rjp-gps-nearest-top"><strong>GPS · Linha ferroviária mais próxima</strong>
+   <div className="rjp-gps-nearest-top"><div className="rjp-gps-place-heading"><strong aria-live="polite">{!gps?'Localização indisponível':gpsAreaLoading?'A identificar localização…':gpsPlace.location||'Localização não identificada'}</strong></div>
     <button type="button" onClick={obterGPS}>{gps?'Atualizar GPS':'Ativar GPS'}</button>
    </div>
+   {gps&&<p className="rjp-gps-admin" aria-label="Coordenadas GPS">GPS: {formatGPSCoordinates(gps)} (±{gps.acc} m){gpsAreaError?' · Nome do local indisponível':''}</p>}
    {nationalLoading?<p>A carregar a rede ferroviária nacional integrada…</p>:nationalError?<p className="warning">{nationalError}. Confirma se a compilação incluiu <code>data/rede-ferroviaria-nacional.json</code>.</p>:
     !gps?<p>À espera de localização GPS. Se já deste autorização à app, a identificação aparece automaticamente; caso contrário, carrega em «Ativar GPS».</p>:
     nearestGPS?.nearest?<>
@@ -336,7 +377,7 @@ function App(){
     </>:<p>{nearestGPS?.error||'Não foi possível localizar uma linha a partir do GPS.'}</p>}
   </section>
   {tab!=='nacional'&&<section className="quicksearch"><div><b>Localizar um quilómetro</b><small>Introduz um PK ou toca no eixo ferroviário para identificar PK, GPS e área geográfica</small></div><input aria-label="PK a localizar" value={pkBusca} onChange={e=>setPkBusca(e.target.value)} onKeyDown={e=>e.key==='Enter'&&procurarPK()}/><button onClick={procurarPK}>Localizar PK</button></section>}
-  {tab==='nacional'&&<NationalNavigator oesteRoute={route} obterGPS={obterGPS} network={nationalNetwork} networkLoading={nationalLoading} networkError={nationalError} focusLine={nationalFocus} gpsNear={nearestGPS?.nearest||null}/>}
+  {tab==='nacional'&&<NationalNavigator oesteRoute={route} obterGPS={obterGPS} network={nationalNetwork} networkLoading={nationalLoading} networkError={nationalError} focusLine={nationalFocus} gpsNear={nearestGPS?.nearest||null} pkReferences={nationalPKRefs} pkStatus={nationalPKStatus}/>}
   {tab==='inicio'&&<main className="grid dashboard">
    <section className="card hero"><h2>O teu troço da Linha do Oeste</h2><p>Do PK <strong>21+191 (Belas / Sintra)</strong> ao PK <strong>191+191 (Carriço / Pombal)</strong>, com 170 km de referência.</p><p>O traçado ferroviário pode ser realçado no mapa. A geolocalização de cada PK exige geometria ferroviária georreferenciada e calibração.</p><div className="stats">{[['59','Passagens de nível'],['38','Estações / apeadeiros'],[String(countConfirmed),'GPS confirmados em campo'],[String(countEstimated),'Coordenadas por cartografia/estimativa'],[String(osmMatched),'Ativos associados ao OSM'],[route?'Disponível':'Pendente','Traçado georreferenciado']].map(([n,lab])=><div key={lab}><b>{n}</b><span>{lab}</span></div>)}</div></section>
    <section className="card"><h3>GPS atual</h3><p>{gps?`${gps.lat}, ${gps.lng} (±${gps.acc} m)`:'Ainda sem posição GPS do dispositivo.'}</p><button onClick={obterGPS}>Atualizar GPS</button><p className="footnote">O GPS guardado sobrepõe-se às estimativas e é conservado entre atualizações, desde que os dados locais da app sejam mantidos.</p></section>

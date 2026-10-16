@@ -1,6 +1,6 @@
 {
   "name": "rjp-navigator",
-  "version": "4.2.0",
+  "version": "4.2.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,7 +11,9 @@
     "prepare:maps": "node scripts/preload-map.mjs",
     "pretest": "node scripts/restore-v40-compat.mjs",
     "repair:data": "node scripts/restore-v40-compat.mjs",
-    "verify:network": "node scripts/verify-network.mjs"
+    "verify:network": "node scripts/verify-network.mjs",
+    "prepare:pk": "node scripts/collect-national-pk.mjs",
+    "verify:pk": "node scripts/verify-pk.mjs"
   },
   "dependencies": {
     "@capacitor/android": "7.2.0",

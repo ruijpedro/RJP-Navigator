@@ -41,3 +41,9 @@
 .rjp-gps-nearest p{margin:6px 0 9px}
 .rjp-gps-nearest button{max-width:100%}
 @media(max-width:600px){.rjp-gps-nearest{margin:8px;padding:12px}}
+
+/* Localização administrativa em destaque no cartão GPS. */
+.rjp-gps-place-heading{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 220px}
+.rjp-gps-place-heading strong{font-size:1.2rem;line-height:1.25;overflow-wrap:anywhere}
+.rjp-gps-place-kicker{text-transform:uppercase;letter-spacing:.04em;font-size:.78rem;color:#56756b;font-weight:700}
+.rjp-gps-nearest .rjp-gps-admin{font-size:.93rem;color:#49675a;margin:4px 0 12px;line-height:1.45}

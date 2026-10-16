@@ -140,3 +140,14 @@ A pasta `.github/workflows/` inclui dois workflows diferentes:
 No GitHub abre **Actions → Build RJP Navigator WebApp V4.1 → Run workflow**. Depois de uma execução bem-sucedida, descarrega `RJP_Navigator_V4_1_WebApp` em **Artifacts**. É uma compilação da WebApp, não uma publicação automática online; os ficheiros têm de ser alojados num servidor web (ou GitHub Pages com configuração apropriada).
 
 Se o pré-carregamento OSM falhar, a aplicação poderá precisar de internet para obter a cartografia no arranque. A compilação não confirma a precisão dos marcos PK.
+
+### V4.2.3 — Localização GPS simplificada
+
+No topo do cartão GPS aparece apenas a localização atual em texto simples
+(localidade e concelho, quando disponíveis) e, logo abaixo, a latitude e
+longitude em WGS84 com seis casas decimais e a precisão GPS indicada pelo
+sistema operativo. A linha ferroviária mais próxima, PK estimado e distância
+à via permanecem num bloco separado. A determinação do nome da localidade
+usa geocodificação inversa OpenStreetMap/Nominatim (necessita de internet) e
+cache local por zona até 24 horas; se o serviço não responder, as coordenadas
+GPS continuam visíveis sem atribuir nomes geográficos fictícios.

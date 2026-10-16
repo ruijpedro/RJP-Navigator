@@ -99,7 +99,7 @@ function NationalMap({route,segments,network,calibration,selectedPoint,onPick,sh
  return <div ref={mapElement} className="leaflet-map national-map" aria-label="Mapa da Rede Ferroviária Nacional"/>;
 }
 
-export default function NationalNavigator({oesteRoute=null,obterGPS,network=null,networkLoading=false,networkError='',focusLine='',gpsNear=null,initialLine='oeste'}){
+export default function NationalNavigator({oesteRoute=null,obterGPS,network=null,networkLoading=false,networkError='',pkReferences=null,pkStatus='',focusLine='',gpsNear=null,initialLine='oeste'}){
  const [store,setStore]=useState(load),[lineId,setLineId]=useState(initialLine),[customName,setCustomName]=useState('');
  const [segmentIndex,setSegmentIndex]=useState(0);
  const [busy,setBusy]=useState(false),[milestoneBusy,setMilestoneBusy]=useState(false),[showHectometers,setShowHectometers]=useState(true),[notice,setNotice]=useState(''),[searchPK,setSearchPK]=useState('115+350');
@@ -128,9 +128,12 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,network=null
  const lineAnchors=anchors[lineId]?.length>=2?anchors[lineId]:convertedAnchors;
  useEffect(()=>{setSegmentIndex(0)},[lineId]);
  useEffect(()=>{if(!focusLine)return;const id=idForNetwork(focusLine);if(opts.some(o=>o.id===id))setLineId(id);},[focusLine,network]);
- const osmMilestones=milestonesByLine[lineId]||EMPTY_ARRAY;
+ const markerKey=`${lineId}|${segmentIndex}`;
+ const bundledMilestones=pkReferences?.lines?.[`${line.nome}|${segmentIndex}`]||EMPTY_ARRAY;
+ const osmMilestones=milestonesByLine[markerKey]||milestonesByLine[lineId]||EMPTY_ARRAY;
+ const combinedMilestones=useMemo(()=>{const ids=new Set();return [...bundledMilestones,...osmMilestones].filter(m=>{const k=m.osmId||`${m.pk}:${m.lat}:${m.lng}`;if(ids.has(k))return false;ids.add(k);return true;});},[bundledMilestones,osmMilestones]);
  const baseCalibration=useMemo(()=>calibrateReferences(currentRoute,lineAnchors),[currentRoute,lineAnchors]);
- const evaluatedMilestones=useMemo(()=>assessMilestones(osmMilestones,baseCalibration),[osmMilestones,baseCalibration]);
+ const evaluatedMilestones=useMemo(()=>assessMilestones(combinedMilestones,baseCalibration),[combinedMilestones,baseCalibration]);
  const enhanced=useMemo(()=>improveCalibrationWithMilestones(currentRoute,lineAnchors,evaluatedMilestones),[currentRoute,lineAnchors,evaluatedMilestones]);
  const calibration=useMemo(()=>calibrateReferences(currentRoute,enhanced.anchors),[currentRoute,enhanced.anchors]);
  const diagnostics=useMemo(()=>calibrationDiagnostics(calibration),[calibration]);
@@ -138,10 +141,10 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,network=null
  const update=(patch)=>{const next={...store,...patch};if(!save(next)){setNotice('O armazenamento local está cheio. Exporta primeiro uma cópia e importa geometria simplificada.');return false;}setStore(next);return true;};
  const attemptedMilestones=useRef(new Set());
  useEffect(()=>{
-  if(!currentRoute?.coords?.length||Object.hasOwn(milestonesByLine,lineId)||attemptedMilestones.current.has(lineId))return;
-  attemptedMilestones.current.add(lineId);
+  if(!currentRoute?.coords?.length||bundledMilestones.length>=2||Object.hasOwn(milestonesByLine,markerKey)||attemptedMilestones.current.has(markerKey))return;
+  attemptedMilestones.current.add(markerKey);
   fetchMilestones(true);
- },[lineId,currentRoute]);
+ },[lineId,segmentIndex,currentRoute,bundledMilestones.length]);
  useEffect(()=>{setSelectedPoint(null);setAdmin(null);setRoad(null);setAdminError('');setRoadError('');},[lineId]);
  const getArea=async p=>{setAdmin(null);setAdminError('');try{const area=await reverseAdministrative(p);setAdmin(area);}catch(e){setAdminError('Freguesia/concelho/distrito indisponíveis sem serviço de consulta: '+e.message);}};
  const pick=React.useCallback((p)=>{
@@ -206,7 +209,7 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,network=null
    const raw=parseMilestoneOSM(result.elements,active,{maxDistance:45});
    const assessed=assessMilestones(raw,calibrateReferences(active,lineAnchors));
    const upgraded=improveCalibrationWithMilestones(active,lineAnchors,assessed);
-   const stored={...milestonesByLine,[lineId]:assessed};
+   const stored={...milestonesByLine,[markerKey]:assessed};
    if(update({milestones:stored}))setNotice(`Marcos OSM: ${raw.length} georreferenciados, ${upgraded.accepted.length} referências adicionais compatíveis e ${upgraded.rejected.length} rejeitadas. Dados OSM não certificados.`);
   }catch(e){setNotice(`Não foi possível obter os marcos OSM: ${e.message}. Mantém-se a calibração anterior.`);}
   finally{setMilestoneBusy(false);}
@@ -219,7 +222,7 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,network=null
  async function findRoad(withGps=false){if(!validGPS(selectedPoint?.lat,selectedPoint?.lng))return;setRoadBusy(true);setRoadError('');setRoad(null);
   try{const origin=withGps&&obterGPS?await obterGPS():null;const result=await findRoadAccess(selectedPoint,origin);setRoad(result.recommended);}catch(e){setRoadError(e.message);}finally{setRoadBusy(false);}
  }
- const exportJSON=()=>downloadText(JSON.stringify({version:'4.2.0',exportedAt:new Date().toISOString(),...store},null,2),'RJP_Navigator_RFN_Calibracao_Backup.json','application/json');
+ const exportJSON=()=>downloadText(JSON.stringify({version:'4.2.1',exportedAt:new Date().toISOString(),...store},null,2),'RJP_Navigator_RFN_Calibracao_Backup.json','application/json');
  const exportCSV=()=>{const items=Object.entries(anchors).flatMap(([id,refs])=>refs.map(a=>[names[id]||RAIL_LINES.find(x=>x.id===id)?.nome||id,formatPK(a.pk),a.lat,a.lng,a.verified?'Sim':'Não',a.source]));
   const csv='\uFEFF'+[['linha','pk','latitude','longitude','validado','fonte'],...items].map(row=>row.map(v=>'"'+String(v||'').replaceAll('"','""')+'"').join(';')).join('\r\n');downloadText(csv,'RJP_Navigator_RFN_Referencias.csv','text/csv;charset=utf-8');};
  const importBackup=async f=>{if(!f)return;try{const data=JSON.parse(await f.text());if(!data||typeof data!=='object'||!data.anchors||!data.routes)throw Error('Formato inválido');
@@ -227,11 +230,12 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,network=null
   if(update({anchors:data.anchors,routes:data.routes,segments:data.segments||{},names:data.names||{},milestones:data.milestones||{}}))setNotice('Backup nacional importado.');
  }catch(e){setNotice('Backup inválido: '+e.message);}finally{if(backupInput.current)backupInput.current.value='';}};
  const routeStatus=calibration.ready?`Calibração estimada entre ${formatPK(calibration.span[0])} e ${formatPK(calibration.span[1])} — ${calibration.anchors.length} referências${calibration.verified?' verificadas':' (algumas por validar)'}`:calibration.reason;
- const linesWithAnchors=Object.values(anchors).filter(a=>a.length>=2).length;
+ const linesWithAnchors=new Set([...Object.entries(anchors).filter(([,a])=>a.length>=2).map(([k])=>k),...Object.entries(pkReferences?.lines||{}).filter(([,a])=>a.length>=2).map(([key])=>key.split('|')[0])]).size;
  return <main className="national-view">
-  <section className="card national-lead"><div><h2>Rede Ferroviária Nacional · V4.2</h2><p>Geometria de toda a rede incorporada na WebApp/APK e motor de calibração por linha. A Linha do Oeste mantém a sua área de responsabilidade no separador original.</p></div>
+  <section className="card national-lead"><div><h2>Rede Ferroviária Nacional · V4.2.1</h2><p>Geometria de toda a rede incorporada na WebApp/APK e motor de calibração por linha. A Linha do Oeste mantém a sua área de responsabilidade no separador original.</p></div>
    <div className="national-stats"><span><b>{opts.length}</b> linhas no catálogo</span><span><b>{linesWithAnchors}</b> com ≥2 referências</span><span><b>{(network?.linhas||[]).reduce((n,l)=>n+(l.segmentos?.filter(s=>s.coords?.length>1).length||0),0)}</b> segmentos nacionais disponíveis</span></div>
   </section>
+  <p className="footnote national-pk-load"><strong>Referências quilométricas nacionais:</strong> {pkStatus||"A verificar…"}. Apenas referências compatíveis com o troço são utilizadas; os marcos OSM não são certificados.</p>
   <section className="national-layout">
    <div className="card national-side">
     {networkLoading&&<p>A carregar a geometria de toda a rede ferroviária…</p>}
@@ -245,7 +249,7 @@ export default function NationalNavigator({oesteRoute=null,obterGPS,network=null
     <button type="button" disabled={busy} onClick={fetchLineOSM}>{busy?'A consultar OSM...':'Procurar eixo OSM desta linha'}</button>
     <button type="button" disabled={milestoneBusy||!currentRoute} onClick={()=>fetchMilestones(false)}>{milestoneBusy?'A procurar marcos...':'Procurar marcos PK no OpenStreetMap'}</button>
     <label className="national-check hecto-toggle"><input type="checkbox" checked={showHectometers} onChange={e=>setShowHectometers(e.target.checked)}/> Mostrar hectométricos (100 m) e marcos OSM</label>
-    <p className="footnote">Hectómetros estimados: {hectometers.length} · Marcos OSM: {osmMilestones.length} · Aceites como referências adicionais: {enhanced.accepted.length}. Os marcadores são desenhados ao aproximar o mapa (zoom 11+).</p>
+    <p className="footnote">Hectómetros estimados: {hectometers.length} · Marcos OSM na linha/troço: {combinedMilestones.length} (incorporados: {bundledMilestones.length}) · Aceites como referências adicionais: {enhanced.accepted.length}. Os marcadores são desenhados ao aproximar o mapa (zoom 11+).</p>
     {calibration.ready&&<p className="footnote">Calibração: {diagnostics.quality}; {diagnostics.warnings} intervalos com alertas; maior distância entre âncoras: {Math.round(diagnostics.worstGapMeters||0)} m. Nenhum marco OSM é certificado automaticamente.</p>}
     <label className="file-action national-file">Importar eixo GeoJSON WGS84<input ref={geoInput} type="file" accept=".geojson,.json" onChange={e=>importRoute(e.target.files?.[0])}/></label>
     <div className="national-separator"><h3>PK nesta linha</h3>

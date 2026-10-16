@@ -80,7 +80,7 @@ const lineId=name=>{
 };
 
 /** Find nearest line independent from PK, then interpolate only where anchors permit it. */
-export function closestRailwayGPS(point,network,{presets={},customAnchors={},extraRoutes=[]}={}){
+export function closestRailwayGPS(point,network,{presets={},customAnchors={},referenceSets={},extraRoutes=[]}={}){
  if(!validGPS(point?.lat,point?.lng))return {error:'Localização GPS inválida.'};
  const accuracy=Number(point.acc);
  const hits=[];
@@ -99,7 +99,7 @@ export function closestRailwayGPS(point,network,{presets={},customAnchors={},ext
  for(const a of hits){const key=normalize(a.line);if(seen.has(key))continue;seen.add(key);unique.push(a);}
  const winner=unique[0];const akey=`${winner.line}|${winner.segmentIndex}`;
  const manual=customAnchors[lineId(winner.line)]||[];
- const anchors=winner.calibration|| (manual.length>=2?manual:presets[akey]?.anchors||[]);
+ const anchors=winner.calibration|| (manual.length>=2?manual:(referenceSets[akey]?.length>=2?referenceSets[akey]:presets[akey]?.anchors||[]));
  const refs=anchorPositions(winner.coords,anchors);
  const pkInfo=winner.distance<=2000?pkFromPosition(winner.along,refs):null;
  const threshold=Math.max(40,Number.isFinite(accuracy)?Math.min(accuracy,100)*1.5:40);
