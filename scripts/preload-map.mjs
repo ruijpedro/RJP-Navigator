@@ -9,6 +9,14 @@ const start=LIMITS.responsibility_segment.points[0].wgs84;
 const end=LIMITS.responsibility_segment.points[1].wgs84;
 const initial=[start.latitude,start.longitude],final=[end.latitude,end.longitude];
 const out=new URL('../public/data/linha-oeste-preload.json',import.meta.url);
+// Nunca substituir o traçado georreferenciado IP por um ficheiro OSM vazio.
+try {
+ const prior=JSON.parse(await readFile(out,'utf8'));
+ if(prior?.route?.source==='ip-shapefile' && prior.route.coords?.length>4000 && prior.route.length>169000){
+  console.log('RJP Navigator: cartografia IP offline já integrada; não substituir.');
+  process.exit(0);
+ }
+} catch { /* só descarregar se não existir cartografia completa */ }
 const result={version:'3.4.0',generatedAt:new Date().toISOString(),source:'OpenStreetMap contributors (ODbL); relation 2076345',route:null,osmPoints:[]};
 try{
  console.log('RJP Navigator: descarregar eixo real da Linha do Oeste (OSM 2076345)');

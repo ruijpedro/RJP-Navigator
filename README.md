@@ -83,3 +83,14 @@ A nova área nacional guarda a sua configuração no dispositivo sob `rjp_nav_na
 - Consultas reais aos serviços OSM/Overpass/Nominatim **não foram confirmadas neste ambiente**.
 
 Uso técnico de apoio; nunca autoriza acesso à via nem substitui planos de segurança, cadastro da IP ou levantamento topográfico.
+
+## Compilação WebApp V4.1 (workflow independente)
+
+A pasta `.github/workflows/` inclui dois workflows diferentes:
+
+- `build-android.yml`: compila a APK Android.
+- `build-web.yml`: executa os testes, tenta preparar a cartografia e compila a WebApp com Vite (`npm run build`). Disponibiliza o artefacto `RJP_Navigator_V4_1_WebApp`, que contém os ficheiros estáticos `dist/`.
+
+No GitHub abre **Actions → Build RJP Navigator WebApp V4.1 → Run workflow**. Depois de uma execução bem-sucedida, descarrega `RJP_Navigator_V4_1_WebApp` em **Artifacts**. É uma compilação da WebApp, não uma publicação automática online; os ficheiros têm de ser alojados num servidor web (ou GitHub Pages com configuração apropriada).
+
+Se o pré-carregamento OSM falhar, a aplicação poderá precisar de internet para obter a cartografia no arranque. A compilação não confirma a precisão dos marcos PK.
