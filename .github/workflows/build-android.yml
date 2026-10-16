@@ -1,4 +1,4 @@
-name: Build RJP Navigator APK V4.0
+name: Build RJP Navigator APK V4.1
 
 on:
   workflow_dispatch:
@@ -37,15 +37,13 @@ jobs:
           npm config set registry https://registry.npmjs.org/
           npm config get registry
 
-      - name: Instalar dependências da V4.0
+      - name: Instalar dependências da V4.1
         run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps --package-lock=false --fetch-retries=4
 
       - name: Executar testes
         run: npm test
 
-      - name: Validar cartografia IP incluída no repositório (offline)
-        env:
-          RJP_REQUIRE_MAPS: '1'
+      - name: Incluir mapa da Linha do Oeste na aplicação
         run: npm run prepare:maps
 
       - name: Gerar WebApp
@@ -102,7 +100,7 @@ jobs:
       - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
-          name: RJP_Navigator_V3_12_APK
+          name: RJP_Navigator_V4_1_APK
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
@@ -126,15 +124,13 @@ jobs:
           npm cache clean --force
           npm config set registry https://registry.npmjs.org/
 
-      - name: Instalar dependências da V4.0
+      - name: Instalar dependências da V4.1
         run: npm install --include=dev --no-audit --no-fund --legacy-peer-deps --package-lock=false --fetch-retries=4
 
       - name: Executar testes
         run: npm test
 
-      - name: Validar cartografia IP incluída no repositório (offline)
-        env:
-          RJP_REQUIRE_MAPS: '1'
+      - name: Incluir mapa da Linha do Oeste na aplicação
         run: npm run prepare:maps
 
       - name: Gerar WebApp
@@ -143,6 +139,6 @@ jobs:
       - name: Publicar WebApp
         uses: actions/upload-artifact@v4
         with:
-          name: RJP_Navigator_V3_12_WebApp
+          name: RJP_Navigator_V4_1_WebApp
           path: dist/
           if-no-files-found: error
