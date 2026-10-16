@@ -1,4 +1,4 @@
-name: Build RJP Navigator WebApp V4.2.3
+name: Build RJP Navigator WebApp V4.2.4
 
 on:
   workflow_dispatch:
@@ -71,13 +71,13 @@ jobs:
         run: |
           test -s dist/index.html
           test -s dist/data/rede-ferroviaria-nacional.json && test -s dist/data/referencias-pk-rfn.json
-          echo 'WebApp V4.2.3 compilada:'
+          echo 'WebApp V4.2.4 compilada:'
           ls -lah dist/
 
       - name: Disponibilizar WebApp para descarregar
         uses: actions/upload-artifact@v4
         with:
-          name: RJP_Navigator_V4_2_3_WebApp
+          name: RJP_Navigator_V4_2_4_WebApp
           path: dist/
           if-no-files-found: error
           retention-days: 30
