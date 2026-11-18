@@ -1,0 +1,100 @@
+name: RJP Navigator - Android Auto Beta
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-auto:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar dependências
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf node_modules package-lock.json
+          npm cache clean --force
+          npm config set registry https://registry.npmjs.org/
+          npm install --include=dev --no-audit --no-fund --legacy-peer-deps --package-lock=false --fetch-retries=4
+
+      - name: Verificar Navigator V4.2.4
+        run: |
+          npm run repair:data
+          npm run verify:network
+          npm test
+          npm run prepare:pk
+          npm run verify:pk
+          npm run prepare:maps
+
+      - name: Integrar bridge de acessos rodoviários confirmados
+        run: node android-auto/scripts/patch-web.mjs
+
+      - name: Compilar a interface Android com o bridge
+        run: npm run build
+
+      - name: Preparar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Preparar SDK Android
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Criar o projeto Android Capacitor
+        run: |
+          if [ ! -d android ]; then npx cap add android; fi
+          npx cap sync android
+
+      - name: Integrar Android Auto (POI) nativo
+        run: node android-auto/scripts/install-native.mjs
+
+      - name: Permissões Android e ícone RJP
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('android/app/src/main/AndroidManifest.xml')
+          s=p.read_text(encoding='utf-8')
+          perms=[
+            '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />',
+            '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />',
+            '<uses-permission android:name="android.permission.INTERNET" />',
+            '<uses-feature android:name="android.hardware.location.gps" android:required="false" />'
+          ]
+          match=re.search(r'<manifest\b[^>]*>',s)
+          if not match: raise SystemExit('Manifest XML inválido')
+          missing=[x for x in perms if x not in s]
+          if missing:
+            s=s[:match.end()]+'\n    '+'\n    '.join(missing)+s[match.end():]
+          p.write_text(s,encoding='utf-8')
+          PY
+          mkdir -p android/app/src/main/res
+          cp -R android-res/* android/app/src/main/res/
+          sed -i 's#android:icon="@[^"]*"#android:icon="@mipmap/ic_launcher"#' android/app/src/main/AndroidManifest.xml
+          sed -i 's#android:roundIcon="@[^"]*"#android:roundIcon="@mipmap/ic_launcher"#' android/app/src/main/AndroidManifest.xml
+
+      - name: Compilar APK Android Auto beta
+        run: cd android && chmod +x gradlew && ./gradlew --no-daemon assembleDebug
+
+      - name: Publicar APK beta
+        uses: actions/upload-artifact@v4
+        with:
+          name: RJP_Navigator_Android_Auto_Beta_APK
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
