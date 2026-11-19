@@ -55,6 +55,12 @@ assert(appMatch,'Tag application em falta');
 const tag=appMatch[0].replace(/android:icon="[^"]*"/,'android:icon="@mipmap/ic_launcher"')
   .replace(/android:roundIcon="[^"]*"/,'android:roundIcon="@mipmap/ic_launcher_round"');
 xml=xml.replace(appMatch[0],tag);
+// A geolocalização do Capacitor exige ambas as permissões no manifest final.
+for (const permission of ['android.permission.ACCESS_FINE_LOCATION','android.permission.ACCESS_COARSE_LOCATION']) {
+  if (!xml.includes('android:name="'+permission+'"')) {
+    xml=xml.replace('<application', '    <uses-permission android:name="'+permission+'" />\n    <application');
+  }
+}
 writeFileSync(manifest,xml);
 const strings=join(app,'src/main/res/values/strings.xml');
 let str=readFileSync(strings,'utf8');
