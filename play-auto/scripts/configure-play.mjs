@@ -40,7 +40,7 @@ writeFileSync(join(app,'build.gradle'),build);
 const varsFile='android/variables.gradle';
 let variables=readFileSync(varsFile,'utf8');
 // Android Auto projetado é uma app para telemóvel: novas apps na Play exigem API 36 (desde 31/08/2026).
-for(const [key,val] of [['compileSdkVersion',36],['targetSdkVersion',36]]){
+for(const [key,val] of [['compileSdkVersion',36],['targetSdkVersion',36],['minSdkVersion',24]]){
  const rex=new RegExp(`\\b${key}\\s*=\\s*\\d+`);
  assert(rex.test(variables),`Não foi possível localizar ${key}`);
  variables=variables.replace(rex,`${key} = ${val}`);
