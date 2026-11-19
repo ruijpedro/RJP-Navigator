@@ -1,0 +1,119 @@
+name: RJP Navigator Auto - Google Play AAB
+
+on:
+  workflow_dispatch:
+    inputs:
+      destino:
+        description: 'Diagnostico = APK para verificar; Google Play = AAB assinado'
+        required: true
+        type: choice
+        default: diagnostico
+        options:
+          - diagnostico
+          - google-play
+
+permissions:
+  contents: read
+
+jobs:
+  android-auto-play:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Obter projeto
+        uses: actions/checkout@v4
+      - name: Preparar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar dependencias publicas
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf node_modules package-lock.json
+          npm config set registry https://registry.npmjs.org/
+          npm install --include=dev --no-audit --no-fund --legacy-peer-deps --package-lock=false --fetch-retries=4
+      - name: Verificar dados e testes da RJP Navigator
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run repair:data
+          npm run verify:network
+          npm test
+          npm run prepare:pk
+          npm run verify:pk
+          npm run prepare:maps
+          node --test android-auto/tests/*.test.mjs play-auto/tests/*.test.mjs
+      - name: Adicionar bridge dos acessos confirmados
+        run: node android-auto/scripts/patch-web.mjs
+      - name: Compilar interface Web da app
+        run: npm run build
+      - name: Preparar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Preparar SDK Android 16 (API 36)
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: 'false'
+      - name: Criar e sincronizar Capacitor
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d android ]; then npx cap add android; fi
+          npx cap sync android
+      - name: Instalar servico Android Auto POI
+        run: node android-auto/scripts/install-native.mjs
+      - name: Criar chave de compilacao no runner (a partir de secret)
+        if: ${{ inputs.destino == 'google-play' }}
+        env:
+          KEYSTORE_B64: ${{ secrets.RJP_PLAY_UPLOAD_KEYSTORE_B64 }}
+          RJP_PLAY_STORE_PASSWORD: ${{ secrets.RJP_PLAY_STORE_PASSWORD }}
+          RJP_PLAY_KEY_ALIAS: ${{ secrets.RJP_PLAY_KEY_ALIAS }}
+          RJP_PLAY_KEY_PASSWORD: ${{ secrets.RJP_PLAY_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for var in KEYSTORE_B64 RJP_PLAY_STORE_PASSWORD RJP_PLAY_KEY_ALIAS RJP_PLAY_KEY_PASSWORD; do
+            if [[ -z "${!var:-}" ]]; then echo "::error::Falta o secret $var. Consulta GUIA-GOOGLE-PLAY-AUTO.md"; exit 1; fi
+          done
+          mkdir -p android/app
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > android/app/rjp-upload-key.jks
+          chmod 600 android/app/rjp-upload-key.jks
+          echo "RJP_PLAY_KEYSTORE_PATH=$GITHUB_WORKSPACE/android/app/rjp-upload-key.jks" >> "$GITHUB_ENV"
+      - name: Configurar package, icone e assinatura Play
+        env:
+          RJP_BUILD_PLAY: ${{ inputs.destino == 'google-play' }}
+          RJP_PLAY_STORE_PASSWORD: ${{ secrets.RJP_PLAY_STORE_PASSWORD }}
+          RJP_PLAY_KEY_ALIAS: ${{ secrets.RJP_PLAY_KEY_ALIAS }}
+          RJP_PLAY_KEY_PASSWORD: ${{ secrets.RJP_PLAY_KEY_PASSWORD }}
+        run: node play-auto/scripts/configure-play.mjs
+      - name: Compilar APK de diagnostico
+        if: ${{ inputs.destino == 'diagnostico' }}
+        run: cd android && chmod +x gradlew && ./gradlew --no-daemon assembleDebug
+      - name: Publicar APK de diagnostico
+        if: ${{ inputs.destino == 'diagnostico' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: RJP_Navigator_Auto_Diagnostico_APK
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      - name: Compilar AAB assinado para Google Play
+        if: ${{ inputs.destino == 'google-play' }}
+        env:
+          RJP_PLAY_STORE_PASSWORD: ${{ secrets.RJP_PLAY_STORE_PASSWORD }}
+          RJP_PLAY_KEY_ALIAS: ${{ secrets.RJP_PLAY_KEY_ALIAS }}
+          RJP_PLAY_KEY_PASSWORD: ${{ secrets.RJP_PLAY_KEY_PASSWORD }}
+        run: cd android && chmod +x gradlew && ./gradlew --no-daemon bundleRelease
+      - name: Publicar ficheiro AAB Google Play
+        if: ${{ inputs.destino == 'google-play' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: RJP_Navigator_Auto_GooglePlay_AAB_Assinado
+          path: android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+      - name: Eliminar keystore temporaria
+        if: ${{ always() }}
+        run: rm -f android/app/rjp-upload-key.jks
