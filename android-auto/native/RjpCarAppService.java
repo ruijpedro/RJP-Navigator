@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Android Auto POI beta. O alvo é SEMPRE um acesso rodoviário validado pelo utilizador,
+ * Android Auto POI. O alvo é SEMPRE um acesso rodoviário validado pelo utilizador,
  * nunca a coordenada do eixo ferroviário. A condução é delegada numa app de navegação.
  */
 public final class RjpCarAppService extends CarAppService {
@@ -75,7 +75,7 @@ public final class RjpCarAppService extends CarAppService {
                 String pk = r.optString("pk", "");
                 String rua = r.optString("name", "Acesso rodoviário");
                 String title = pk.isEmpty() ? linha : linha + " · PK " + pk;
-                output.add(new Access(title, rua + " · Confirmado no telemóvel", lat, lng));
+                output.add(new Access(title, rua, lat, lng));
             }
         } catch (Exception ignored) {
             // Nunca apresentar dados duvidosos se a cache estiver danificada.
@@ -90,14 +90,14 @@ public final class RjpCarAppService extends CarAppService {
             List<Access> data = readConfirmed(getCarContext());
             if (data.isEmpty()) {
                 return new MessageTemplate.Builder(
-                    "Ainda não há acessos confirmados. No telemóvel, seleciona um PK, " +
-                    "confirma uma estrada pública/transitável e guarda o acesso no Navigator."
+                    "Sem acessos guardados. No telemóvel, abre o RJP Navigator Auto, " +
+                    "escolhe o PK e confirma o acesso rodoviário."
                 ).setHeader(new Header.Builder()
-                        .setTitle("RJP Navigator · Acessos")
+                        .setTitle("RJP Navigator Auto")
                         .setStartHeaderAction(Action.APP_ICON).build()).build();
             }
             ItemList.Builder list = new ItemList.Builder();
-            for (int i = 0; i < Math.min(data.size(), 60); i++) {
+            for (int i = 0; i < Math.min(data.size(), 25); i++) {
                 Access a = data.get(i);
                 list.addItem(new Row.Builder()
                         .setTitle(a.title)
@@ -113,7 +113,7 @@ public final class RjpCarAppService extends CarAppService {
             }
             return new ListTemplate.Builder()
                     .setHeader(new Header.Builder()
-                            .setTitle("Acessos rodoviários confirmados")
+                            .setTitle("RJP Navigator Auto")
                             .setStartHeaderAction(Action.APP_ICON).build())
                     .setSingleList(list.build())
                     .build();
