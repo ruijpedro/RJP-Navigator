@@ -446,7 +446,14 @@ function App(){
   {tab==='desloc'&&<main className="card records"><h2>Deslocações e cópia de dados</h2><div className="actions"><button onClick={exportarJSON}>Exportar JSON</button><label className="file-action">Importar cópia JSON<input ref={jsonRef} type="file" accept="application/json,.json" onChange={e=>importarBackup(e.target.files?.[0])}/></label></div>
    {desloc.length===0?<p>Sem deslocações registadas.</p>:<div className="table-scroll"><table><thead><tr><th>Data</th><th>Hora</th><th>Destino</th><th>PK</th><th>GPS</th></tr></thead><tbody>{desloc.map(d=><tr key={d.id}><td>{d.data}</td><td>{d.hora}</td><td>{d.destino}</td><td>{d.pk}</td><td>{d.gps}</td></tr>)}</tbody></table></div>}
    <p className="footnote">Exporta um JSON antes de desinstalar ou limpar os dados da app. As coordenadas de campo, PK corrigidos e acessos são guardados localmente no dispositivo.</p></main>}
-  <footer>RJP Navigator V4.0 · Rede Ferroviária Nacional · Linha do Oeste · PK 21+191 a 191+191 · Cartografia OSM: coordenadas por PK aproximadas, validar no terreno · Não substitui os procedimentos de segurança ferroviária.</footer>
+  <section className="card" aria-label="Fontes de informação e independência" style={{margin:'16px auto',maxWidth:1100}}>
+   <h2>Fontes de informação e independência</h2>
+   <p><strong>Aplicação independente e não oficial.</strong> O RJP Navigator Auto não representa, não é afiliado nem é autorizado por qualquer entidade governamental, pela Infraestruturas de Portugal ou pela CP.</p>
+   <p>Fontes públicas de referência para dados ferroviários: <a href="https://dados.gov.pt/pt/datasets/rede-ferroviaria-nacional/" target="_blank" rel="noopener noreferrer">Rede Ferroviária Nacional — dados.gov.pt</a> e <a href="https://dados.gov.pt/pt/datasets/estacoes-e-apeadeiros/" target="_blank" rel="noopener noreferrer">Estações e Apeadeiros — dados.gov.pt</a>. Estes conjuntos de dados são referências oficiais, não uma certificação dos PK calculados pela aplicação.</p>
+   <p>Cartografia e consultas complementares: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap (autores e licença)</a>, <a href="https://www.openrailwaymap.org/" target="_blank" rel="noopener noreferrer">OpenRailwayMap</a> e <a href="https://overpass-api.de/" target="_blank" rel="noopener noreferrer">Overpass API</a>. Os dados de localização e de ativos podem ainda provir de registos locais, importações e medições GPS do utilizador.</p>
+   <p className="footnote">Os PK, acessos e posições estimados são indicativos, não são dados oficiais certificados e não substituem levantamentos topográficos, informação operacional oficial nem procedimentos de segurança ferroviária.</p>
+  </section>
+  <footer>RJP Navigator V4.0 · Aplicação independente e não oficial · Cartografia e PK indicativos · Não substitui os procedimentos de segurança ferroviária.</footer>
  </div>;
 }
 
