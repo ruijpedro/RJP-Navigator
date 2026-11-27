@@ -9,11 +9,12 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test tests/*.test.mjs",
     "prepare:maps": "node scripts/preload-map.mjs",
-    "pretest": "node scripts/verify-network.mjs",
+    "pretest": "node scripts/reapply-ip-nav.mjs",
     "repair:data": "node scripts/restore-v40-compat.mjs",
     "verify:network": "node scripts/verify-network.mjs",
     "prepare:pk": "node scripts/collect-national-pk.mjs",
-    "verify:pk": "node scripts/verify-pk.mjs"
+    "verify:pk": "node scripts/verify-pk.mjs",
+    "prebuild": "node scripts/reapply-ip-nav.mjs"
   },
   "dependencies": {
     "@capacitor/android": "7.2.0",
