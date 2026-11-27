@@ -9,19 +9,11 @@ const must=(before,after,label)=>{
  if(!s.includes(before))throw Error('IP reapply: anchor not found: '+label);
  s=s.replace(before,after);
 };
-if(!s.includes("import IPNavigator from './components/IPNavigator.jsx';")){
- must("import NationalNavigator from './components/NationalNavigator.jsx';",
- "import NationalNavigator from './components/NationalNavigator.jsx';\nimport IPNavigator from './components/IPNavigator.jsx';",'import');
-}
-if(!s.includes("['ip','Cartografia IP']")){
- must("['nacional','Rede Nacional'],","['nacional','Rede Nacional'],['ip','Cartografia IP'],",'tab');
-}
-if(!s.includes("{tab==='ip'&&<IPNavigator")){
- must("{tab==='nacional'&&<NationalNavigator",
- "{tab==='ip'&&<IPNavigator gps={gps} onGPS={obterGPS}/>}\n  {tab==='nacional'&&<NationalNavigator",'component');
-}
-s=s.replace("{tab!=='nacional'&&<section className=\"quicksearch\">",
- "{!['nacional','ip'].includes(tab)&&<section className=\"quicksearch\">");
+// Keep the IP datasets bundled, but hide the experimental standalone screen.
+s=s.replace("import IPNavigator from './components/IPNavigator.jsx';\n","");
+s=s.replace("['ip','Cartografia IP'],","");
+s=s.replace("  {tab==='ip'&&<IPNavigator gps={gps} onGPS={obterGPS}/>}\n","");
+s=s.replace("{!['nacional','ip'].includes(tab)&&","{tab!=='nacional'&&");
 await writeFile(mainPath,s,'utf8');
 
 let sw=await readFile(swPath,'utf8');
