@@ -28,5 +28,8 @@
     "xlsx": "0.18.5",
     "leaflet": "1.9.4"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "overrides": {
+    "@babel/traverse": "7.29.15"
+  }
 }
