@@ -32,6 +32,12 @@ export function nearest(p,items){
  if(!p||!Number.isFinite(+p.lat)||!Number.isFinite(+p.lng)) return null;
  const lat=+p.lat, lng=+p.lng,sy=111195,sx=sy*Math.cos(lat*Math.PI/180);let best=null;
  for(const item of items||[]){
+  if(best&&Array.isArray(item.bbox)&&item.bbox.length===4){
+   const [south,west,north,east]=item.bbox;
+   const dy=Math.max(south-lat,0,lat-north)*sy;
+   const dx=Math.max(west-lng,0,lng-east)*sx;
+   if(Math.hypot(dx,dy)>best.distance+1)continue;
+  }
   const pts=item.points|| (item.point?[item.point,item.point]:[]);
   for(let i=1;i<pts.length;i++){
    const a=pts[i-1],b=pts[i];
