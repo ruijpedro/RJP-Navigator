@@ -1,14 +1,15 @@
-/* RJP Navigator WebApp V4.0: app e geometria ferroviária locais. */
-const CACHE = 'rjp-navigator-webapp-v4-0-0';
+/* RJP Navigator WebApp cartografia IP experimental: app e geometria ferroviária locais. */
+const CACHE = 'rjp-navigator-webapp-v4-3-ip-experimental-2';
 const BASE = new URL(self.registration.scope);
 const required = [
   '', 'index.html', 'manifest.webmanifest', 'favicon.png',
   'icon-192.png', 'icon-512.png',
-  'data/linha-oeste-preload.json', 'data/rede-ferroviaria-nacional.json'
+  'data/linha-oeste-preload.json', 'data/rede-ferroviaria-nacional.json',
+  'data/ip/rail.json', 'data/ip/road.json', 'data/ip/stations.json'
 ].map(path => new URL(path, BASE).href);
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE)
-    .then(cache => Promise.allSettled(required.map(url => cache.add(url))))
+    .then(cache => cache.addAll(required))
     .then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', event => {
