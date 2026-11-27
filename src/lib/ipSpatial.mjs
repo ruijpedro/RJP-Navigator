@@ -29,7 +29,7 @@ export const normalize = s => String(s??'').normalize('NFD').replace(/[\u0300-\u
 
 /** Geo proximity in metres, for WGS84 (lat,lng) points. This does not establish official PK. */
 export function nearest(p,items){
- if(!p||!Number.isFinite(+p.lat)||!Number.isFinite(+p.lng)) return null;
+ if(!p||p.lat==null||p.lng==null||String(p.lat).trim()===''||String(p.lng).trim()===''||!Number.isFinite(+p.lat)||!Number.isFinite(+p.lng)||Math.abs(+p.lat)>90||Math.abs(+p.lng)>180) return null;
  const lat=+p.lat, lng=+p.lng,sy=111195,sx=sy*Math.cos(lat*Math.PI/180);let best=null;
  for(const item of items||[]){
   if(best&&Array.isArray(item.bbox)&&item.bbox.length===4){
@@ -49,4 +49,12 @@ export function nearest(p,items){
   }
  }
  return best;
+}
+
+// Explicit provenance; an estimate must be supplied independently, never extrapolated silently.
+export function pkStatus(chainage, anchors=[], estimatedPk=null){
+ const pk=Number.isFinite(chainage)?calibratedPk(chainage,anchors):null;
+ if(Number.isFinite(pk))return {status:'calibrated',pk};
+ if(Number.isFinite(chainage)&&Number.isFinite(estimatedPk)&&estimatedPk>=0)return {status:'estimated',pk:estimatedPk};
+ return {status:'unavailable',pk:null};
 }
