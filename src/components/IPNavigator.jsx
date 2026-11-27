@@ -1,6 +1,6 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import L from 'leaflet';
-import {nearest,normalize} from '../lib/ipSpatial.mjs';
+import {nearest,normalize,projectCorridor,pkStatus} from '../lib/ipSpatial.mjs';
 
 const base=import.meta.env.BASE_URL;
 async function load(path){
@@ -16,6 +16,8 @@ export default function IPNavigator({gps,onGPS}){
  const [data,setData]=useState({rail:[],road:[],stations:[]});
  const [status,setStatus]=useState('A carregar cartografia offline…');
  const [kind,setKind]=useState('rail'),[query,setQuery]=useState(''),[selected,setSelected]=useState(null);
+ const [anchors,setAnchors]=useState(()=>{try{return JSON.parse(localStorage.getItem('rjp-ip-pk-v1')||'{}')||{}}catch{return {}}});
+ const [pkInput,setPkInput]=useState(''),[calMessage,setCalMessage]=useState('');
  const mapEl=useRef(null),mapRef=useRef(null),layersRef=useRef(null);
  useEffect(()=>{
   let active=true;
@@ -42,6 +44,26 @@ export default function IPNavigator({gps,onGPS}){
  const items=data[kind]||[];
  const hits=useMemo(()=>items.filter(x=>normalize([x.name,x.detail,x.line,x.municipality,x.district].join(' ')).includes(normalize(query))).slice(0,60),[items,query]);
  const near=useMemo(()=>gps?Object.fromEntries(Object.entries(data).map(([k,list])=>[k,nearest(gps,list)])):null,[gps,data]);
+ const rail=near?.rail?.item;
+ const railKey=rail?JSON.stringify([rail.name,rail.detail,rail.points[0],rail.points.at(-1),rail.points.length]):null;
+ const projection=useMemo(()=>{
+  if(!rail||!gps)return null;
+  const sy=111195,sx=sy*Math.cos(39.5*Math.PI/180);
+  const xy=([lat,lng])=>[lng*sx,lat*sy];
+  return projectCorridor(xy([+gps.lat,+gps.lng]),rail.points.map(xy));
+ },[rail,gps]);
+ const localAnchors=railKey?(anchors[railKey]||[]):[];
+ const pk=pkStatus(projection?.chainage,localAnchors);
+ function saveAnchors(list){
+  const next={...anchors,[railKey]:list};
+  try{localStorage.setItem('rjp-ip-pk-v1',JSON.stringify(next));setAnchors(next);setCalMessage('Calibração guardada neste dispositivo.')}catch{setCalMessage('Não foi possível guardar a calibração.')}
+ }
+ function addAnchor(){
+  const value=Number(pkInput.replace(',','.'))*1000;
+  if(!railKey||!projection||near.rail.distance>30||!pkInput.trim()||!Number.isFinite(value)||value<0){setCalMessage('Introduza um PK válido em km e aproxime-se a menos de 30 m do corredor.');return;}
+  if(localAnchors.some(a=>Math.abs(a.chainage-projection.chainage)<5)){setCalMessage('Já existe um ponto de calibração a menos de 5 m.');return;}
+  saveAnchors([...localAnchors,{chainage:projection.chainage,pk:value}].sort((a,b)=>a.chainage-b.chainage));setPkInput('');
+ }
  const access=useMemo(()=>{
   if(!selected||!data.road.length)return null;
   const point=selected.point||selected.points?.[0];
@@ -73,6 +95,16 @@ export default function IPNavigator({gps,onGPS}){
   <p><b>{data.rail.length}</b> segmentos ferroviários · <b>{data.road.length}</b> troços rodoviários · <b>{data.stations.length}</b> estações e apeadeiros</p>
   <button type="button" onClick={onGPS}>Atualizar GPS</button>
   {near&&Object.entries(near).map(([k,x])=>x&&<p key={k}><b>{keys[k]} mais próxima:</b> {x.item.name} · {Math.round(x.distance)} m</p>)}
+  <div className="card">
+   <h3>Calibração local de PK</h3>
+   <p>Corredor GPS: {rail?.name||'Indisponível'} {rail?.detail||''}</p>
+   <p><b>{pk.status==='calibrated'?'PK calibrado localmente: '+(pk.pk/1000).toFixed(3):'PK indisponível'}</b></p>
+   <label>PK conhecido (km) <input inputMode="decimal" value={pkInput} onChange={e=>setPkInput(e.target.value)} placeholder="Ex.: 123,456"/></label>
+   <button type="button" disabled={!railKey} onClick={addAnchor}>Guardar ponto GPS + PK</button>
+   <p>{calMessage}</p>
+   {localAnchors.map((a,i)=><p key={a.chainage}>PK {(a.pk/1000).toFixed(3)} <button type="button" onClick={()=>saveAnchors(localAnchors.filter((_,j)=>i!==j))}>Remover</button></p>)}
+   <small>São necessários dois pontos no mesmo corredor. Confirme a linha e o PK no terreno. Calibração local, não certificada; não utilizar como referência de segurança ferroviária.</small>
+  </div>
   <p className="footnote">Distâncias aproximadas. A presença de uma estrada próxima não confirma acesso autorizado. A cartografia não contém PK oficiais associados a cada vértice.</p>
   <label>Categoria <select value={kind} onChange={e=>changeKind(e.target.value)}>
    <option value="rail">Ferrovia</option><option value="road">Rodovia</option><option value="stations">Estações e apeadeiros</option>
