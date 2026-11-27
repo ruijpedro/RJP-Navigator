@@ -25,7 +25,7 @@ s=s.replace("{tab!=='nacional'&&<section className=\"quicksearch\">",
 await writeFile(mainPath,s,'utf8');
 
 let sw=await readFile(swPath,'utf8');
-sw=sw.replace(/rjp-navigator-webapp-v4-[0-9-]+/g,'rjp-navigator-webapp-v4-3-ip-experimental');
+sw=sw.replace(/const CACHE = 'rjp-navigator-webapp-[^']+';/,\"const CACHE = 'rjp-navigator-webapp-v4-3-ip-experimental';\");
 if(!sw.includes("'data/ip/rail.json'")){
  const old="'data/linha-oeste-preload.json', 'data/rede-ferroviaria-nacional.json'";
  if(!sw.includes(old))throw Error('IP reapply: service worker cache list not found');
