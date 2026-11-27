@@ -58,6 +58,30 @@ export default function IPNavigator({gps,onGPS}){
   const next={...anchors,[railKey]:list};
   try{localStorage.setItem('rjp-ip-pk-v1',JSON.stringify(next));setAnchors(next);setCalMessage('Calibração guardada neste dispositivo.')}catch{setCalMessage('Não foi possível guardar a calibração.')}
  }
+ function exportCalibration(){
+  const blob=new Blob([JSON.stringify({schema:1,anchors},null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='rjp-pk-calibracao.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
+ async function importCalibration(event){
+  const file=event.target.files?.[0];event.target.value='';if(!file)return;
+  try{
+   if(file.size>2000000)throw Error('Ficheiro demasiado grande');
+   const payload=JSON.parse(await file.text());
+   if(payload.schema!==1||!payload.anchors||typeof payload.anchors!=='object'||Array.isArray(payload.anchors))throw Error('Formato inválido');
+   const validKeys=new Set(data.rail.map(r=>JSON.stringify([r.name,r.detail,r.points[0],r.points.at(-1),r.points.length])));
+   const next={...anchors};let count=0;
+   for(const [key,list] of Object.entries(payload.anchors)){
+    if(!validKeys.has(key)||!Array.isArray(list)||list.length>10000)throw Error('Corredor incompatível ou lista inválida');
+    const sorted=[...list].sort((a,b)=>a.chainage-b.chainage);
+    if(sorted.some(a=>!a||!Number.isFinite(a.chainage)||a.chainage<0||!Number.isFinite(a.pk)||a.pk<0))throw Error('Referência inválida');
+    const ds=sorted.slice(1).map((a,i)=>a.pk-sorted[i].pk);
+    if(sorted.some((a,i)=>i>0&&a.chainage-sorted[i-1].chainage<5)||(ds.length&&!(ds.every(d=>d>0)||ds.every(d=>d<0))))throw Error('Calibração incoerente');
+    if(Object.hasOwn(next,key)&&JSON.stringify(next[key])!==JSON.stringify(sorted))throw Error('Conflito com calibração local; exporte e resolva antes de importar');
+    next[key]=sorted;count+=sorted.length;
+   }
+   localStorage.setItem('rjp-ip-pk-v1',JSON.stringify(next));setAnchors(next);setCalMessage(count+' pontos importados, sem substituir calibrações existentes.');
+  }catch(e){setCalMessage('Importação rejeitada: '+e.message);}
+ }
  function addAnchor(){
   const value=Number(pkInput.replace(',','.'))*1000;
   if(!railKey||!projection||near.rail.distance>30||!pkInput.trim()||!Number.isFinite(value)||value<0){setCalMessage('Introduza um PK válido em km e aproxime-se a menos de 30 m do corredor.');return;}
@@ -104,6 +128,8 @@ export default function IPNavigator({gps,onGPS}){
    <p><b>{pk.status==='calibrated'?'PK calibrado localmente: '+(pk.pk/1000).toFixed(3):'PK indisponível'}</b></p>
    <label>PK conhecido (km) <input inputMode="decimal" value={pkInput} onChange={e=>setPkInput(e.target.value)} placeholder="Ex.: 123,456"/></label>
    <button type="button" disabled={!railKey} onClick={addAnchor}>Guardar ponto GPS + PK</button>
+   <button type="button" onClick={exportCalibration}>Exportar calibrações JSON</button>
+   <label>Importar calibrações <input type="file" accept=".json,application/json" disabled={!data.rail.length} onChange={importCalibration}/></label>
    <p>{calMessage}</p>
    {localAnchors.map((a,i)=><p key={a.chainage}>PK {(a.pk/1000).toFixed(3)} <button type="button" onClick={()=>saveAnchors(localAnchors.filter((_,j)=>i!==j))}>Remover</button></p>)}
    <small>São necessários dois pontos no mesmo corredor. Confirme a linha e o PK no terreno. Calibração local, não certificada; não utilizar como referência de segurança ferroviária.</small>
