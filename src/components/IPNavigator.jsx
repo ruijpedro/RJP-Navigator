@@ -1,35 +1,85 @@
-import React,{useEffect,useMemo,useState} from 'react';
+import React,{useEffect,useMemo,useRef,useState} from 'react';
+import L from 'leaflet';
 import {nearest,normalize} from '../lib/ipSpatial.mjs';
 
 const base=import.meta.env.BASE_URL;
-const load=async (path)=>{const res=await fetch(base+path,{cache:'force-cache'});if(!res.ok)throw new Error(path);return res.json();};
+async function load(path){
+ const response=await fetch(base+path,{cache:'force-cache'});
+ if(!response.ok)throw new Error('HTTP '+response.status+': '+path);
+ return response.json();
+}
+function railFallback(data){
+ return (data.linhas||[]).flatMap(line=>(line.segmentos||[]).map(s=>({name:line.nome,detail:s.segmento,points:s.coords}))).filter(x=>x.points?.length>1);
+}
+const keys={rail:'Linha ferroviária',road:'Estrada',stations:'Estação/apeadeiro'};
 export default function IPNavigator({gps,onGPS}){
- const [rail,setRail]=useState([]),[roads,setRoads]=useState([]),[stations,setStations]=useState([]);
- const [status,setStatus]=useState('A carregar dados locais…'),[kind,setKind]=useState('rail'),[q,setQ]=useState('');
- useEffect(()=>{let alive=true;
+ const [data,setData]=useState({rail:[],road:[],stations:[]});
+ const [status,setStatus]=useState('A carregar cartografia offline…');
+ const [kind,setKind]=useState('rail'),[query,setQuery]=useState(''),[selected,setSelected]=useState(null);
+ const mapEl=useRef(null),mapRef=useRef(null),layersRef=useRef(null);
+ useEffect(()=>{
+  let active=true;
   Promise.allSettled([
-   load('data/ip/rail.json').catch(async()=>{const data=await load('data/rede-ferroviaria-nacional.json');return (data.linhas||[]).flatMap(l=>(l.segmentos||[]).map(s=>({name:l.nome,detail:s.segmento,points:s.coords})));}),
+   load('data/ip/rail.json').catch(async()=>railFallback(await load('data/rede-ferroviaria-nacional.json'))),
    load('data/ip/road.json'),
    load('data/ip/stations.json')
-  ]).then(([r,d,s])=>{if(!alive)return;
-   setRail(r.status==='fulfilled'?r.value:[]);
-   setRoads(d.status==='fulfilled'?d.value:[]);
-   setStations(s.status==='fulfilled'?s.value:[]);
-   setStatus(r.status==='fulfilled'?'Cartografia ferroviária local disponível':'Ficheiro ferroviário offline indisponível');
-  });return()=>{alive=false;};
+  ]).then(([rail,road,stations])=>{
+   if(!active)return;
+   const next={rail:rail.status==='fulfilled'?rail.value:[],road:road.status==='fulfilled'?road.value:[],stations:stations.status==='fulfilled'?stations.value:[]};
+   setData(next);
+   setStatus(next.rail.length&&next.road.length&&next.stations.length?'Cartografia nacional disponível offline':'Atenção: uma ou mais camadas não estão disponíveis neste pacote');
+  });
+  return()=>{active=false};
  },[]);
- const data={rail,road:roads,stations},items=data[kind]||[];
- const filtered=useMemo(()=>items.filter(x=>normalize([x.name,x.line,x.detail,x.municipality].join(' ')).includes(normalize(q))).slice(0,60),[items,q]);
- const close=useMemo(()=>gps?Object.fromEntries(Object.entries(data).map(([key,list])=>[key,nearest(gps,list)])):null,[gps,rail,roads,stations]);
+ useEffect(()=>{
+  if(!mapEl.current)return;
+  const map=L.map(mapEl.current,{preferCanvas:true,scrollWheelZoom:false}).setView([39.6,-8.2],7);
+  const layers=L.layerGroup().addTo(map);
+  mapRef.current=map;layersRef.current=layers;
+  L.control.scale({imperial:false}).addTo(map);
+  return()=>{map.remove();mapRef.current=null;layersRef.current=null};
+ },[]);
+ const items=data[kind]||[];
+ const hits=useMemo(()=>items.filter(x=>normalize([x.name,x.detail,x.line,x.municipality,x.district].join(' ')).includes(normalize(query))).slice(0,60),[items,query]);
+ const near=useMemo(()=>gps?Object.fromEntries(Object.entries(data).map(([k,list])=>[k,nearest(gps,list)])):null,[gps,data]);
+ const access=useMemo(()=>{
+  if(!selected||!data.road.length)return null;
+  const point=selected.point||selected.points?.[0];
+  return point?nearest({lat:point[0],lng:point[1]},data.road):null;
+ },[selected,data.road]);
+ useEffect(()=>{
+  const group=layersRef.current,map=mapRef.current;
+  if(!group||!map)return;
+  group.clearLayers();
+  for(const segment of data.rail){
+   if(segment.points?.length>1)L.polyline(segment.points,{color:'#168369',weight:2,interactive:false}).addTo(group);
+  }
+  if(gps&&Number.isFinite(+gps.lat)&&Number.isFinite(+gps.lng))
+   L.circleMarker([+gps.lat,+gps.lng],{color:'#2563eb',radius:7,fillOpacity:1}).addTo(group);
+  if(selected){
+   const p=selected.points;
+   const marker=p?.length>1?L.polyline(p,{color:'#e78a18',weight:5}).addTo(group):
+    selected.point?L.circleMarker(selected.point,{color:'#e78a18',radius:9}).addTo(group):null;
+   if(marker){
+    if(p?.length>1)map.fitBounds(marker.getBounds(),{padding:[18,18]});
+    else map.setView(selected.point,14);
+   }
+  }
+ },[data,gps,selected]);
+ const changeKind=k=>{setKind(k);setSelected(null)};
  return <section className="card" aria-label="Cartografia IP">
-  <h2>Cartografia IP</h2><p>{status}. Dados apresentados sem ligação aos mapas online.</p>
-  <p><b>Ferrovia:</b> {rail.length} segmentos · <b>Rodovia:</b> {roads.length} segmentos · <b>Estações:</b> {stations.length}</p>
+  <h2>Cartografia IP</h2>
+  <p>{status}. Base geográfica sem necessidade de mosaicos online.</p>
+  <p><b>{data.rail.length}</b> segmentos ferroviários · <b>{data.road.length}</b> troços rodoviários · <b>{data.stations.length}</b> estações e apeadeiros</p>
   <button type="button" onClick={onGPS}>Atualizar GPS</button>
-  {close&&Object.entries(close).map(([name,result])=>result&&<p key={name}><b>{({rail:'Linha',road:'Estrada',stations:'Estação'})[name]} próxima:</b> {result.item.name||result.item.line} — {Math.round(result.distance)} m</p>)}
-  <p className="footnote">Distâncias geográficas aproximadas; não equivalem a PK oficiais. O GPS deve ser validado no terreno.</p>
-  <label>Filtrar <select value={kind} onChange={e=>setKind(e.target.value)}><option value="rail">Linhas ferroviárias</option><option value="road">Estradas</option><option value="stations">Estações/apeadeiros</option></select></label>
-  <input value={q} onChange={e=>setQ(e.target.value)} aria-label="Pesquisar cartografia IP" placeholder="Nome, linha, concelho…"/>
-  {((kind==='road'&&!roads.length)||(kind==='stations'&&!stations.length))&&<p>Esta camada ainda não está disponível no pacote experimental. Mantém-se a rede ferroviária existente.</p>}
-  <div style={{maxHeight:280,overflowY:'auto'}}>{filtered.map((x,i)=><div key={i} style={{padding:'6px 0',borderBottom:'1px solid #9994'}}><strong>{x.name}</strong> <small>{x.detail||x.line||x.municipality||''}</small></div>)}</div>
+  {near&&Object.entries(near).map(([k,x])=>x&&<p key={k}><b>{keys[k]} mais próxima:</b> {x.item.name} · {Math.round(x.distance)} m</p>)}
+  <p className="footnote">Distâncias aproximadas. A presença de uma estrada próxima não confirma acesso autorizado. A cartografia não contém PK oficiais associados a cada vértice.</p>
+  <label>Categoria <select value={kind} onChange={e=>changeKind(e.target.value)}>
+   <option value="rail">Ferrovia</option><option value="road">Rodovia</option><option value="stations">Estações e apeadeiros</option>
+  </select></label>
+  <input value={query} onChange={e=>setQuery(e.target.value)} aria-label="Pesquisar cartografia IP" placeholder="Pesquisar nome, estrada, linha ou distrito"/>
+  <div style={{maxHeight:220,overflowY:'auto'}}>{hits.map((x,i)=><button type="button" key={i} style={{display:'block',width:'100%',textAlign:'left',padding:6}} onClick={()=>setSelected(x)}>{x.name} · {x.detail||x.line||x.municipality||''}</button>)}</div>
+  <div ref={mapEl} style={{height:380,background:'#e5e7eb',borderRadius:8}} role="img" aria-label="Mapa vetorial offline de corredores ferroviários e pontos selecionados"/>
+  {access&&<p>Estrada próxima do ponto selecionado: <b>{access.item.name}</b> ({Math.round(access.distance)} m). Acesso rodoviário não validado.</p>}
  </section>;
 }
