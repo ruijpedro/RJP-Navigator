@@ -53,7 +53,7 @@ export default function IPNavigator({gps,onGPS}){
   return projectCorridor(xy([+gps.lat,+gps.lng]),rail.points.map(xy));
  },[rail,gps]);
  const localAnchors=railKey?(anchors[railKey]||[]):[];
- const pk=pkStatus(projection?.chainage,localAnchors);
+ const pk=pkStatus(near?.rail?.distance<=30?projection?.chainage:NaN,localAnchors);
  function saveAnchors(list){
   const next={...anchors,[railKey]:list};
   try{localStorage.setItem('rjp-ip-pk-v1',JSON.stringify(next));setAnchors(next);setCalMessage('Calibração guardada neste dispositivo.')}catch{setCalMessage('Não foi possível guardar a calibração.')}
@@ -62,7 +62,10 @@ export default function IPNavigator({gps,onGPS}){
   const value=Number(pkInput.replace(',','.'))*1000;
   if(!railKey||!projection||near.rail.distance>30||!pkInput.trim()||!Number.isFinite(value)||value<0){setCalMessage('Introduza um PK válido em km e aproxime-se a menos de 30 m do corredor.');return;}
   if(localAnchors.some(a=>Math.abs(a.chainage-projection.chainage)<5)){setCalMessage('Já existe um ponto de calibração a menos de 5 m.');return;}
-  saveAnchors([...localAnchors,{chainage:projection.chainage,pk:value}].sort((a,b)=>a.chainage-b.chainage));setPkInput('');
+  const next=[...localAnchors,{chainage:projection.chainage,pk:value}].sort((a,b)=>a.chainage-b.chainage);
+  const deltas=next.slice(1).map((a,i)=>a.pk-next[i].pk);
+  if(deltas.length&&!(deltas.every(d=>d>0)||deltas.every(d=>d<0))){setCalMessage('PK incoerentes: os valores devem crescer ou decrescer ao longo do corredor. Verifique os pontos.');return;}
+  saveAnchors(next);setPkInput('');
  }
  const access=useMemo(()=>{
   if(!selected||!data.road.length)return null;
