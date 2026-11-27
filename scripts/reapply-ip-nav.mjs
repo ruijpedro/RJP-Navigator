@@ -14,6 +14,18 @@ s=s.replace("import IPNavigator from './components/IPNavigator.jsx';\n","");
 s=s.replace("['ip','Cartografia IP'],","");
 s=s.replace("  {tab==='ip'&&<IPNavigator gps={gps} onGPS={obterGPS}/>}\n","");
 s=s.replace("{!['nacional','ip'].includes(tab)&&","{tab!=='nacional'&&");
+
+// Collapse legal sources without removing disclosures or links.
+s=s.replace(/<section className="card" aria-label="Fontes de informação e independência"[^>]*>\s*<h2>Fontes de informação e independência<\/h2>/, '<details className="card" aria-label="Fontes de informação e independência" style={{margin:"12px auto",maxWidth:1100}}><summary style={{cursor:"pointer",fontWeight:600}}>ⓘ Sobre a aplicação</summary>');
+const aboutStart=s.indexOf('<details className="card" aria-label="Fontes de informação e independência"');
+if(aboutStart>=0){
+ const end=s.indexOf('</section>',aboutStart);
+ if(end>=0 && end<s.indexOf('<footer',aboutStart)){
+  const block=s.slice(aboutStart,end).replace(/<a href=/g,'<a style={{display:"inline",background:"transparent",color:"#086348",padding:0,border:0,borderRadius:0,textDecoration:"underline",fontWeight:500,boxShadow:"none"}} href=');
+  s=s.slice(0,aboutStart)+block+'</details>'+s.slice(end+10);
+ }
+}
+
 await writeFile(mainPath,s,'utf8');
 
 let sw=await readFile(swPath,'utf8');
