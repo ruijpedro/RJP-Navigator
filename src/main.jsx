@@ -13,6 +13,7 @@ import {fetchBundledCartography} from './lib/preload.js';
 import {findRoadAccess} from './lib/access.js';
 import {identifyRailPoint,reverseAdministrative} from './lib/identify.js';
 import NationalNavigator from './components/NationalNavigator.jsx';
+import IPNavigator from './components/IPNavigator.jsx';
 import {loadNationalNetwork} from './lib/network-loader.js';
 import {closestRailwayGPS} from './lib/gps-nearest.js';
 import {NATIONAL_PRESETS} from './lib/national-presets-v42.js';
@@ -360,7 +361,7 @@ function App(){
  const selectedOnMap=consulta!==null&&consultPoint?{...consultPoint,key:`pk-consulta-${consulta}`,titulo:`PK ${formatPK(consulta)}`}:selKey&&isPositioned(current)?current:null;
  return <div className="app">
   <header><img src="./icon-192.png" alt="RJP"/><div><h1>RJP Navigator <span>V4.2.4</span></h1><p>Rede Ferroviária Nacional · Linha do Oeste em destaque</p></div><div className="header-pill">Navegação técnica ferroviária</div></header>
-  <nav>{[['inicio','Início'],['nacional','Rede Nacional'],['locais','Locais'],['pn','Passagens de nível'],['km','PK/Km'],['mapa','Linha do Oeste'],['novo','Novo local'],['desloc','Deslocações']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>changeTab(k)}>{t}</button>)}</nav>
+  <nav>{[['inicio','Início'],['nacional','Rede Nacional'],['ip','Cartografia IP'],['locais','Locais'],['pn','Passagens de nível'],['km','PK/Km'],['mapa','Linha do Oeste'],['novo','Novo local'],['desloc','Deslocações']].map(([k,t])=><button key={k} className={tab===k?'on':''} onClick={()=>changeTab(k)}>{t}</button>)}</nav>
   {notice&&<div className="notice" role="status">{notice}<button title="Fechar" onClick={()=>setNotice('')}>×</button></div>}
   <section className="card rjp-gps-nearest" aria-label="Localização ferroviária automática por GPS">
    <div className="rjp-gps-nearest-top"><div className="rjp-gps-place-heading"><strong aria-live="polite">{!gps?'Localização indisponível':gpsAreaLoading?'A identificar localização…':gpsPlace.location||'Localização não identificada'}</strong></div>
@@ -376,7 +377,8 @@ function App(){
      <button type="button" onClick={goToDetectedLine}>Abrir linha no mapa nacional</button>
     </>:<p>{nearestGPS?.error||'Não foi possível localizar uma linha a partir do GPS.'}</p>}
   </section>
-  {tab!=='nacional'&&<section className="quicksearch"><div><b>Localizar um quilómetro</b><small>Introduz um PK ou toca no eixo ferroviário para identificar PK, GPS e área geográfica</small></div><input aria-label="PK a localizar" value={pkBusca} onChange={e=>setPkBusca(e.target.value)} onKeyDown={e=>e.key==='Enter'&&procurarPK()}/><button onClick={procurarPK}>Localizar PK</button></section>}
+  {!['nacional','ip'].includes(tab)&&<section className="quicksearch"><div><b>Localizar um quilómetro</b><small>Introduz um PK ou toca no eixo ferroviário para identificar PK, GPS e área geográfica</small></div><input aria-label="PK a localizar" value={pkBusca} onChange={e=>setPkBusca(e.target.value)} onKeyDown={e=>e.key==='Enter'&&procurarPK()}/><button onClick={procurarPK}>Localizar PK</button></section>}
+  {tab==='ip'&&<IPNavigator gps={gps} onGPS={obterGPS}/>}
   {tab==='nacional'&&<NationalNavigator oesteRoute={route} obterGPS={obterGPS} network={nationalNetwork} networkLoading={nationalLoading} networkError={nationalError} focusLine={nationalFocus} gpsNear={nearestGPS?.nearest||null} pkReferences={nationalPKRefs} pkStatus={nationalPKStatus}/>}
   {tab==='inicio'&&<main className="grid dashboard">
    <section className="card hero"><h2>O teu troço da Linha do Oeste</h2><p>Do PK <strong>21+191 (Belas / Sintra)</strong> ao PK <strong>191+191 (Carriço / Pombal)</strong>, com 170 km de referência.</p><p>O traçado ferroviário pode ser realçado no mapa. A geolocalização de cada PK exige geometria ferroviária georreferenciada e calibração.</p><div className="stats">{[['59','Passagens de nível'],['38','Estações / apeadeiros'],[String(countConfirmed),'GPS confirmados em campo'],[String(countEstimated),'Coordenadas por cartografia/estimativa'],[String(osmMatched),'Ativos associados ao OSM'],[route?'Disponível':'Pendente','Traçado georreferenciado']].map(([n,lab])=><div key={lab}><b>{n}</b><span>{lab}</span></div>)}</div></section>
