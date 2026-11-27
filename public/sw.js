@@ -1,5 +1,5 @@
 /* RJP Navigator WebApp cartografia IP experimental: app e geometria ferroviária locais. */
-const CACHE = 'rjp-navigator-webapp-v4-3-ip-experimental';
+const CACHE = 'rjp-navigator-webapp-v4-3-ip-experimental-2';
 const BASE = new URL(self.registration.scope);
 const required = [
   '', 'index.html', 'manifest.webmanifest', 'favicon.png',
@@ -9,7 +9,7 @@ const required = [
 ].map(path => new URL(path, BASE).href);
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE)
-    .then(cache => Promise.allSettled(required.map(url => cache.add(url))))
+    .then(cache => cache.addAll(required))
     .then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', event => {
