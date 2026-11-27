@@ -24,3 +24,23 @@ export function calibratedPk(chainage,anchors){
  }
  return null;
 }
+
+export const normalize = s => String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+
+/** Geo proximity in metres, for WGS84 (lat,lng) points. This does not establish official PK. */
+export function nearest(p,items){
+ if(!p||!Number.isFinite(+p.lat)||!Number.isFinite(+p.lng)) return null;
+ const lat=+p.lat, lng=+p.lng,sy=111195,sx=sy*Math.cos(lat*Math.PI/180);let best=null;
+ for(const item of items||[]){
+  const pts=item.points|| (item.point?[item.point,item.point]:[]);
+  for(let i=1;i<pts.length;i++){
+   const a=pts[i-1],b=pts[i];
+   if(!a||!b||![...a,...b].every(Number.isFinite))continue;
+   const x=(a[1]-lng)*sx,y=(a[0]-lat)*sy,dx=(b[1]-a[1])*sx,dy=(b[0]-a[0])*sy;
+   const t=Math.max(0,Math.min(1,-(x*dx+y*dy)/(dx*dx+dy*dy||1)));
+   const distance=Math.hypot(x+t*dx,y+t*dy);
+   if(!best||distance<best.distance)best={item,distance,lat:a[0]+t*(b[0]-a[0]),lng:a[1]+t*(b[1]-a[1])};
+  }
+ }
+ return best;
+}
