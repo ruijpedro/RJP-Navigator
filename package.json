@@ -9,7 +9,7 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test tests/*.test.mjs",
     "prepare:maps": "node scripts/preload-map.mjs",
-    "pretest": "node scripts/restore-v40-compat.mjs",
+    "pretest": "node scripts/verify-network.mjs",
     "repair:data": "node scripts/restore-v40-compat.mjs",
     "verify:network": "node scripts/verify-network.mjs",
     "prepare:pk": "node scripts/collect-national-pk.mjs",
